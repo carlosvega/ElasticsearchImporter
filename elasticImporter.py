@@ -17,6 +17,9 @@ def parse_args():
 	parser.add_argument('--timeout', dest='timeout', required=False, default=600, help='Connection timeout. Default: 600')
 	parser.add_argument('--skip_first_line', dest='skip_first_line', default=False, action='store_true', help='Skips first line.')
 	parser.add_argument('--refresh', dest='refresh', default=False, action='store_true', help='Refresh the index when finished.')
+	parser.add_argument('--replicas', dest='replicas', default=0, help='Number of replicas for the index if it does not exist. Default: 0')
+	parser.add_argument('--shards', dest='shards', default=2, help='Number of shards for the index if it does not exist. Default: 2')
+	parser.add_argument('--refresh_interval', dest='refresh_interval', default='60s', help='Refresh interval for the index if it does not exist. Default: 60s')
 	parser.add_argument('--dates_in_seconds', dest='dates_in_seconds', default=False, action='store_true', help='If true, assume dates are provided in seconds.')
 	args = parser.parse_args()
 	return args
@@ -110,6 +113,14 @@ if __name__ == '__main__':
 	es = Elasticsearch(args.node, timeout=args.timeout)
 	connections.create_connection(hosts=[args.node], timeout=args.timeout) #connection for api
 	#initialize mapping
+	index_obj = Index(index, using=es)
+	if not index_obj.exists():
+		index_obj.settings(
+		    number_of_replicas=args.replicas,
+		    number_of_shards=args.shards,
+		    refresh_interval=args.refresh_interval
+		)
+		index_obj.save()
 	DocClass.init(index=index, using=es)
 	#create the file iterator
 	documents = input_generator(cfg, index, doc_type, args)
