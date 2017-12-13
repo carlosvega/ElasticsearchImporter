@@ -1,4 +1,4 @@
-# ElasticsearchImporter
+# Elasticsearch Importer
 Generic Elasticsearch Importer
 
 ```
