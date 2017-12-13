@@ -1,0 +1,8 @@
+cffi==1.6.0
+elasticsearch==5.5.1
+elasticsearch-dsl==5.4.0
+greenlet==0.4.9
+python-dateutil==2.6.1
+readline==6.2.4.1
+six==1.11.0
+urllib3==1.21.1
