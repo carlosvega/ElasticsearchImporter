@@ -38,7 +38,6 @@ def translate_cfg_property(v):
 
 def create_doc_class(cfg, doc_type):
 	#create class
-	print cfg['properties'].items()
 	dicc = {}
 	for k, v in cfg['properties'].items():
 		dicc[k] = translate_cfg_property(v)
@@ -46,12 +45,16 @@ def create_doc_class(cfg, doc_type):
 	return DocClass
 
 def parse_property(value, t):
-	if t == 'date' or t == 'integer':
-		return int(value)
-	elif t == 'float':
-		return float(value)
-	else: # t == 'text' or t == 'keyword' or t == 'ip' or t == 'geopoint':
-		return value
+	try:
+		if t == 'integer':
+				return int(value)
+		elif t == 'date' or t == 'float':
+			return float(value)
+		else: # t == 'text' or t == 'keyword' or t == 'ip' or t == 'geopoint':
+			return value
+	except ValueError:
+		logging.warn('Error processing value |{}| of type |{}|'.format(value, t))
+		raise ValueError
 
 def input_generator(cfg, index, doc_type, args):
 	properties = cfg['properties']
@@ -76,6 +79,9 @@ def input_generator(cfg, index, doc_type, args):
 				'_type'   : doc_type
 			}
 			yield a
+		except ValueError as e:
+			logging.warn('Error processing line |{}| ({}). Ignoring line.'.format(line, ctr))
+			continue
 		except Exception as e:
 			logging.warn('Error processing line |{}| ({}). Ignoring line. Details {}'.format(line, ctr, sys.exc_info()[0]))
 			continue
