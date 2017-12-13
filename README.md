@@ -1,0 +1,2 @@
+# ElasticsearchImporter
+Generic Elasticsearch Importer
