@@ -17,6 +17,7 @@ def parse_args():
 	parser.add_argument('--timeout', dest='timeout', required=False, default=600, help='Connection timeout. Default: 600')
 	parser.add_argument('--skip_first_line', dest='skip_first_line', default=False, action='store_true', help='Skips first line.')
 	parser.add_argument('--refresh', dest='refresh', default=False, action='store_true', help='Refresh the index when finished.')
+	parser.add_argument('--dates_in_seconds', dest='dates_in_seconds', default=False, action='store_true', help='If true, assume dates are provided in seconds.')
 	args = parser.parse_args()
 	return args
 
@@ -44,17 +45,22 @@ def create_doc_class(cfg, doc_type):
 	DocClass = type(doc_type, (DocType,), dicc)
 	return DocClass
 
-def parse_property(value, t):
+def parse_property(value, t, args):
 	try:
 		if t == 'integer':
 				return int(value)
-		elif t == 'date' or t == 'float':
+		elif t == 'date':
+			return float(value)*1000 if args.dates_in_seconds else float(value)
+		elif t == 'float':
 			return float(value)
 		else: # t == 'text' or t == 'keyword' or t == 'ip' or t == 'geopoint':
 			return value
 	except ValueError:
 		logging.warn('Error processing value |{}| of type |{}|'.format(value, t))
 		raise ValueError
+	except TypeError:
+		logging.warn('Error processing value |{}| of type |{}|'.format(value, t))
+		raise TypeError
 
 def input_generator(cfg, index, doc_type, args):
 	properties = cfg['properties']
@@ -72,7 +78,7 @@ def input_generator(cfg, index, doc_type, args):
 				continue
 			ctr+=1
 			sline = line.rstrip().split(args.separator)
-			dicc = {fields[i]: parse_property(value, properties[fields[i]]) for i, value in enumerate(sline)}
+			dicc = {fields[i]: parse_property(value, properties[fields[i]], args) for i, value in enumerate(sline)}
 			a = {
 				'_source' : dicc,
 				'_index'  : index,
