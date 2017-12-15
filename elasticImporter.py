@@ -21,6 +21,8 @@ def parse_args():
 	parser.add_argument('--shards', dest='shards', default=2, help='Number of shards for the index if it does not exist. Default: 2')
 	parser.add_argument('--refresh_interval', dest='refresh_interval', default='60s', help='Refresh interval for the index if it does not exist. Default: 60s')
 	parser.add_argument('--dates_in_seconds', dest='dates_in_seconds', default=False, action='store_true', help='If true, assume dates are provided in seconds.')
+	parser.add_argument('--debug', dest='debug', default=False, action='store_true', help='If true log level is set to DEBUG.')
+	parser.add_argument('--show_elastic_logger', dest='show_elastic_logger', default=False, action='store_true', help='If true show elastic logger at the same loglevel as the importer.')
 	args = parser.parse_args()
 	return args
 
@@ -109,12 +111,16 @@ def input_generator(cfg, index, doc_type, args):
 			continue
 
 if __name__ == '__main__':
-	for _ in ("elasticsearch", "urllib3"):
-		logging.getLogger(_).setLevel(logging.CRITICAL)
-
-	logging.basicConfig(format='%(asctime)s %(message)s', level=logging.INFO)
 	#load parameters
 	args = parse_args()
+
+	if not args.show_elastic_logger:
+		for _ in ("elasticsearch", "urllib3"):
+			logging.getLogger(_).setLevel(logging.CRITICAL)
+
+
+	loglevel = logging.DEBUG if args.debug else logging.INFO
+	logging.basicConfig(format='%(asctime)s %(message)s', level=loglevel)
 	#load cfg file
 	cfg = json.load(open(args.cfg))
 	index = cfg['meta']['index']
