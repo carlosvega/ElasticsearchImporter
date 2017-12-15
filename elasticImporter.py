@@ -1,7 +1,7 @@
 from elasticsearch import Elasticsearch, helpers
 from elasticsearch_dsl import *
 from elasticsearch_dsl.connections import connections
-import fileinput, sys, logging, argparse, gc, codecs, json
+import fileinput, sys, logging, argparse, gc, codecs, json, math
 from argparse import RawTextHelpFormatter
 from datetime import datetime
 
@@ -48,22 +48,34 @@ def create_doc_class(cfg, doc_type):
 	DocClass = type(doc_type, (DocType,), dicc)
 	return DocClass
 
-def parse_property(value, t, args):
+def is_nan_or_inf(value):
+	if math.isinf(value) or math.isnan(value):
+		logging.debug('Nan or inf encountered in value: |{}|.'.format(value))
+		return True
+	else:
+		return False
+
+numeric_properties = set(('integer', 'date', 'float'))
+def parse_property(str_value, t, args):
 	try:
+		if t in numeric_properties:
+			float_value = float(str_value)
+			if is_nan_or_inf(float_value):
+				return None
 		if t == 'integer':
-				return int(value)
+			return int(float_value)
 		elif t == 'date':
-			return float(value)*1000 if args.dates_in_seconds else float(value)
+			return float_value*1000 if args.dates_in_seconds else float_value
 		elif t == 'float':
-			return float(value)
+			return float_value
 		else: # t == 'text' or t == 'keyword' or t == 'ip' or t == 'geopoint':
-			return value
+			return str_value
 	except ValueError:
-		logging.warn('Error processing value |{}| of type |{}|'.format(value, t))
-		raise ValueError
+		logging.warn('Error processing value |{}| of type |{}|'.format(str_value, t))
+		return None
 	except TypeError:
-		logging.warn('Error processing value |{}| of type |{}|'.format(value, t))
-		raise TypeError
+		logging.warn('Error processing value |{}| of type |{}|'.format(str_value, t))
+		return None
 
 def input_generator(cfg, index, doc_type, args):
 	properties = cfg['properties']
@@ -82,6 +94,7 @@ def input_generator(cfg, index, doc_type, args):
 			ctr+=1
 			sline = line.rstrip().split(args.separator)
 			dicc = {fields[i]: parse_property(value, properties[fields[i]], args) for i, value in enumerate(sline)}
+			#dicc = {k : dicc[k] for k in dicc if dicc[k] is not None} #remove nones
 			a = {
 				'_source' : dicc,
 				'_index'  : index,
