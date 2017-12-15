@@ -73,10 +73,10 @@ def parse_property(str_value, t, args):
 		else: # t == 'text' or t == 'keyword' or t == 'ip' or t == 'geopoint':
 			return str_value
 	except ValueError:
-		logging.warn('Error processing value |{}| of type |{}|'.format(str_value, t))
+		logging.warn('Error processing value |{}| of type |{}| ignoring this field.'.format(str_value, t))
 		return None
 	except TypeError:
-		logging.warn('Error processing value |{}| of type |{}|'.format(str_value, t))
+		logging.warn('Error processing value |{}| of type |{}| ignoring this field.'.format(str_value, t))
 		return None
 
 def input_generator(cfg, index, doc_type, args):
