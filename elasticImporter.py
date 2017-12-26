@@ -35,6 +35,8 @@ def translate_cfg_property(v):
 		return Keyword()
 	elif v == 'integer':
 		return Integer()
+	elif v == 'long':
+		return Long()
 	elif v == 'float':
 		return Float()
 	elif v == 'geopoint':
@@ -57,7 +59,7 @@ def is_nan_or_inf(value):
 	else:
 		return False
 
-numeric_properties = set(('integer', 'date', 'float'))
+numeric_properties = set(('integer', 'long', 'date', 'float'))
 def parse_property(str_value, t, args):
 	try:
 		if t in numeric_properties:
@@ -66,6 +68,8 @@ def parse_property(str_value, t, args):
 				return None
 		if t == 'integer':
 			return int(float_value)
+		if t == 'long':
+			return long(float_value)
 		elif t == 'date':
 			return float_value*1000 if args.dates_in_seconds else float_value
 		elif t == 'float':
