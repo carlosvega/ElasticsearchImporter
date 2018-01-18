@@ -1,7 +1,7 @@
 from elasticsearch import Elasticsearch, helpers
 from elasticsearch_dsl import *
 from elasticsearch_dsl.connections import connections
-import fileinput, sys, logging, argparse, gc, codecs, json, math
+import fileinput, sys, logging, argparse, gc, codecs, json, math, hashlib
 from argparse import RawTextHelpFormatter
 from datetime import datetime
 
@@ -23,6 +23,8 @@ def parse_args():
 	parser.add_argument('--dates_in_seconds', dest='dates_in_seconds', default=False, action='store_true', help='If true, assume dates are provided in seconds.')
 	parser.add_argument('--debug', dest='debug', default=False, action='store_true', help='If true log level is set to DEBUG.')
 	parser.add_argument('--show_elastic_logger', dest='show_elastic_logger', default=False, action='store_true', help='If true show elastic logger at the same loglevel as the importer.')
+	parser.add_argument('--md5_id', dest='md5_id', default=False, action='store_true', help='Uses the MD5 hash of the line as ID.')
+	parser.add_argument('--md5_exclude', dest='md5_exclude', nargs = '*', required=False, default=[], help='List of column names to be excluded from the hash.')
 	args = parser.parse_args()
 	return args
 
@@ -106,6 +108,14 @@ def input_generator(cfg, index, doc_type, args):
 				'_index'  : index,
 				'_type'   : doc_type
 			}
+
+			if args.md5_id:
+				md5_dicc = {}
+				for idx, field in enumerate(fields):
+					if field not in args.md5_exclude:
+						md5_dicc[field] = dicc[field]
+				a['_id'] = hashlib.md5(json.dumps(md5_dicc)).hexdigest()
+
 			yield a
 		except ValueError as e:
 			logging.warn('Error processing line |{}| ({}). Ignoring line.'.format(line, ctr))
