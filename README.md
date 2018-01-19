@@ -20,6 +20,8 @@ Generic Elasticsearch Importer
 |        | --shards           | Number of shards for the index if it does not exist.   | 2             |
 |        | --refresh_interval | Refresh interval for the index if it does not exist.   | 60s           |
 |        | --dates_in_seconds | If true, assume dates are provided in seconds.         |               |
+|        | --md5_id           | Uses the MD5 hash of the line as ID.                   |               |
+|        | --md5_exclude      | List of column names to be excluded from the hash.     |               |
 
 ## Configuration file format
 
