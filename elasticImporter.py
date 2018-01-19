@@ -11,6 +11,8 @@ def parse_args():
 	parser.add_argument('-c', '--cfg', dest='cfg', required=True, help='Configuration file.')
 	parser.add_argument('-s', '--separator', dest='separator', required=False, default=';', help='File Separator. Default: ;')
 	parser.add_argument('-n', '--node', dest='node', required=False, default='localhost', help='Elasticsearch node. Default: localhost')
+	parser.add_argument('-x', '--index', dest='index', required=False, default=None, help='Elasticsearch index. It overrides the cfg JSON file values. Default: the index specified in the JSON file.')
+	parser.add_argument('-t', '--type', dest='type', required=False, default=None, help='Elasticsearch document type. It overrides the cfg JSON file values. Default: the type specified in the JSON file.')
 	parser.add_argument('--bulk', dest='bulk', required=False, default=2000, help='Elasticsearch bulk size parameter. Default: 2000')
 	parser.add_argument('--threads', dest='threads', required=False, default=5, help='Number of threads for the parallel bulk. Default: 5')
 	parser.add_argument('--queue', dest='queue', required=False, default=5, help='Size of queue for the parallel bulk. Default: 6')
@@ -137,8 +139,8 @@ if __name__ == '__main__':
 	logging.basicConfig(format='%(asctime)s %(message)s', level=loglevel)
 	#load cfg file
 	cfg = json.load(open(args.cfg))
-	index = cfg['meta']['index']
-	doc_type = str(cfg['meta']['type'])
+	index = cfg['meta']['index'] if args.index is None else args.index
+	doc_type = str(cfg['meta']['type']) if args.type is None else args.type
 	#create class from the cfg
 	#this class is used to initialize the mapping
 	DocClass = create_doc_class(cfg, doc_type)
