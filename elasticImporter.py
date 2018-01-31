@@ -15,6 +15,7 @@ def parse_args():
 	parser.add_argument('-c', '--cfg', dest='cfg', required=True, help='Configuration file.')
 	parser.add_argument('-s', '--separator', dest='separator', required=False, default=';', help='File Separator. Default: ;')
 	parser.add_argument('-n', '--node', dest='node', required=False, default='localhost', help='Elasticsearch node. Default: localhost')
+	parser.add_argument('-p', '--port', dest='port', required=False, default=9200, help='Elasticsearch port. Default: 9200')
 	parser.add_argument('-x', '--index', dest='index', required=False, default=None, help='Elasticsearch index. It overrides the cfg JSON file values. Default: the index specified in the JSON file.')
 	parser.add_argument('-t', '--type', dest='type', required=False, default=None, help='Elasticsearch document type. It overrides the cfg JSON file values. Default: the type specified in the JSON file.')
 	parser.add_argument('--bulk', dest='bulk', required=False, default=2000, help='Elasticsearch bulk size parameter. Default: 2000')
@@ -160,7 +161,7 @@ if __name__ == '__main__':
 	loglevel = logging.DEBUG if args.debug else logging.INFO
 	logging.basicConfig(format='%(asctime)s %(message)s', level=loglevel)
 
-	es = Elasticsearch(args.node, timeout=args.timeout)
+	es = Elasticsearch(args.node, timeout=args.timeout, port=args.port)
 	full_version = es.info()['version']['number']
 	version = int(full_version.split('.')[0])
 
@@ -179,7 +180,7 @@ if __name__ == '__main__':
 	#this class is used to initialize the mapping
 	DocClass = create_doc_class(cfg, doc_type)
 	#connection to elasticsearch
-	connections.create_connection(hosts=[args.node], timeout=args.timeout) #connection for api
+	connections.create_connection(hosts=[args.node], timeout=args.timeout, port=args.port) #connection for api
 	#initialize mapping
 	index_obj = Index(index, using=es)
 	if not index_obj.exists():
