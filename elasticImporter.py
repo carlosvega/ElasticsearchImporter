@@ -5,6 +5,10 @@ import fileinput, sys, logging, argparse, gc, codecs, json, math, hashlib
 from argparse import RawTextHelpFormatter
 from datetime import datetime
 
+args = None
+translate_cfg_property = None
+version = None
+
 def parse_args():
 	parser = argparse.ArgumentParser(description='This program indexes file with certificate details to an elasticsearch cluster.\n', formatter_class=RawTextHelpFormatter)
 	parser.add_argument('-i', '--input', dest='input', required=False, default='-', help='Input file. Default: stdin.')
@@ -30,7 +34,25 @@ def parse_args():
 	args = parser.parse_args()
 	return args
 
-def translate_cfg_property(v):
+def translate_cfg_property_2x(v):
+	if v == 'date':
+		return Date()
+	elif v == 'text':
+		return String()
+	elif v == 'keyword':
+		return String(index="not_analyzed")
+	elif v == 'integer':
+		return Integer()
+	elif v == 'long':
+		return Long()
+	elif v == 'float':
+		return Float()
+	elif v == 'geopoint':
+		return GeoPoint()
+	elif v == 'ip':
+		return Ip()
+
+def translate_cfg_property_std(v):
 	if v == 'date':
 		return Date()
 	elif v == 'text':
@@ -75,7 +97,7 @@ def parse_property(str_value, t, args):
 		if t == 'long':
 			return long(float_value)
 		elif t == 'date':
-			return float_value*1000 if args.dates_in_seconds else float_value
+			return int(float_value*1000) if args.dates_in_seconds else int(float_value)
 		elif t == 'float':
 			return float_value
 		else: # t == 'text' or t == 'keyword' or t == 'ip' or t == 'geopoint':
@@ -130,13 +152,25 @@ if __name__ == '__main__':
 	#load parameters
 	args = parse_args()
 
+	#set up loggers
 	if not args.show_elastic_logger:
 		for _ in ("elasticsearch", "urllib3"):
 			logging.getLogger(_).setLevel(logging.CRITICAL)
 
-
 	loglevel = logging.DEBUG if args.debug else logging.INFO
 	logging.basicConfig(format='%(asctime)s %(message)s', level=loglevel)
+
+	es = Elasticsearch(args.node, timeout=args.timeout)
+	full_version = es.info()['version']['number']
+	version = int(full_version.split('.')[0])
+
+	if version == 1:
+		logging.error('Elasticsearch version 1.x is not supported.')
+
+	logging.info('Using elasticsearch version {}'.format(full_version))
+
+	translate_cfg_property = translate_cfg_property_2x if version == 2 else translate_cfg_property_std
+
 	#load cfg file
 	cfg = json.load(open(args.cfg))
 	index = cfg['meta']['index'] if args.index is None else args.index
@@ -145,7 +179,6 @@ if __name__ == '__main__':
 	#this class is used to initialize the mapping
 	DocClass = create_doc_class(cfg, doc_type)
 	#connection to elasticsearch
-	es = Elasticsearch(args.node, timeout=args.timeout)
 	connections.create_connection(hosts=[args.node], timeout=args.timeout) #connection for api
 	#initialize mapping
 	index_obj = Index(index, using=es)
