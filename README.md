@@ -10,6 +10,7 @@ Generic Elasticsearch Importer
 | -c     | --cfg              | Configuration file.                                    |               |
 | -s     | --separator        | File Separator.                                        | semicolon     |
 | -n     | --node             | Elasticsearch node.                                    | localhost     |
+| -p     | --port             | Elasticsearch port.                                    | 9200     |
 | -x     | --index            | Elasticsearch index. Overrides the JSON cfg file value.         | Value from the JSON cfg file |
 | -t     | --type             | Elasticsearch document type. Overrides the JSON cfg file value. | Value from the JSON cfg file |
 |        | --bulk             | Elasticsearch bulk size parameter.                     | 2000          |
