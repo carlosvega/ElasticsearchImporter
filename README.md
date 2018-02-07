@@ -59,7 +59,10 @@ cd ElasticsearchImporter
 pip install virtualenv
 virtualenv myenv -p `which pypy`
 source myenv/bin/activate 
-pip install -r requirements.txt
+sudo apt-get update
+sudo apt-get install build-essential libssl-dev libffi-dev python-dev
+sudo pip2 install --upgrade urllib3[secure] requests[security] pyopenssl ndg-httpsclient pyasn1 pip
+pip2 install -rU requirements.txt 
 #index your first 100K lines
 time yes '1509750000000;52.5720661, 52.5720661;192.168.1.1;PotatoFriend;This is a potato and it is your friend;20;201.1' | head -100000 | pv -l | pypy elasticImporter.py -c example.cfg
 ```
