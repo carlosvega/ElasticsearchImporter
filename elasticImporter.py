@@ -30,6 +30,8 @@ def parse_args():
 	parser.add_argument('--dates_in_seconds', dest='dates_in_seconds', default=False, action='store_true', help='If true, assume dates are provided in seconds.')
 	parser.add_argument('--debug', dest='debug', default=False, action='store_true', help='If true log level is set to DEBUG.')
 	parser.add_argument('--show_elastic_logger', dest='show_elastic_logger', default=False, action='store_true', help='If true show elastic logger at the same loglevel as the importer.')
+	parser.add_argument('--raise_on_error', dest='raise_on_error', default=False, action='store_true', help='Raise BulkIndexError containing errors (as .errors) from the execution of the last chunk when some occur. By default we DO NOT raise.')
+	parser.add_argument('--raise_on_exception', dest='raise_on_exception', default=False, action='store_true', help='By default we don’t propagate exceptions from call to bulk and just report the items that failed as failed. Use this option to propagate exceptions.')
 	parser.add_argument('--md5_id', dest='md5_id', default=False, action='store_true', help='Uses the MD5 hash of the line as ID.')
 	parser.add_argument('--md5_exclude', dest='md5_exclude', nargs = '*', required=False, default=[], help='List of column names to be excluded from the hash.')
 	args = parser.parse_args()
@@ -193,7 +195,7 @@ if __name__ == '__main__':
 	DocClass.init(index=index, using=es)
 	#create the file iterator
 	documents = input_generator(cfg, index, doc_type, args)
-	ret = helpers.parallel_bulk(es, documents, raise_on_exception=False, thread_count=args.threads, queue_size=args.queue, chunk_size=args.bulk)
+	ret = helpers.parallel_bulk(es, documents, raise_on_exception=args.raise_on_exception, thread_count=args.threads, queue_size=args.queue, chunk_size=args.bulk, raise_on_error=args.raise_on_error)
 
 	failed = 0; success = 0;
 	for ok, item in ret:
