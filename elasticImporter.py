@@ -116,10 +116,14 @@ def input_generator(cfg, index, doc_type, args):
 	properties = cfg['properties']
 	fields = cfg['order_in_file']
 	n_fields = len(cfg['order_in_file'])
-	if args.input != '-':
-		f = codecs.open(args.input, buffering=1, encoding='latin-1')
-	else:
-		f = sys.stdin
+	try:
+		if args.input != '-':
+			f = codecs.open(args.input, buffering=1, encoding='latin-1')
+		else:
+			f = sys.stdin
+	except IOError as e:
+		logging.error('Error with the input file |{}|, Details: {}.'.format(args.input, sys.exc_info()[0]))
+		return
 
 	ctr = 0
 	for line in f:
@@ -196,7 +200,7 @@ if __name__ == '__main__':
 	#create the file iterator
 	documents = input_generator(cfg, index, doc_type, args)
 	ret = helpers.parallel_bulk(es, documents, raise_on_exception=args.raise_on_exception, thread_count=args.threads, queue_size=args.queue, chunk_size=args.bulk, raise_on_error=args.raise_on_error)
-
+	failed_items = []
 	failed = 0; success = 0;
 	for ok, item in ret:
 		#STATS
@@ -204,6 +208,7 @@ if __name__ == '__main__':
 			success+=1	
 		else:
 			failed+=1
+			failed_items.append(item)
 		#PROGRESS
 		if (success+failed)%100000 == 0:
 			logging.info('Success: {0}, Failed: {1}'.format(success, failed))
@@ -212,6 +217,10 @@ if __name__ == '__main__':
 
 	if failed > 0:
 		logging.error('There were some errors during the process: Success: {0}, Failed: {1}'.format(success, failed))
+		logging.error('These were the errors:')
+		for failed_item in failed_items:
+			sys.stderr.write('||{}||\n'.format(item))
+			
 
 	if args.refresh:
 		es.indices.refresh(index=index)
