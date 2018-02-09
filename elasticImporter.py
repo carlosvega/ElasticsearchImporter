@@ -1,7 +1,7 @@
 from elasticsearch import Elasticsearch, helpers
 from elasticsearch_dsl import *
 from elasticsearch_dsl.connections import connections
-import fileinput, sys, logging, argparse, gc, codecs, json, math, hashlib
+import fileinput, sys, logging, argparse, gc, codecs, json, math, hashlib, signal, os
 from argparse import RawTextHelpFormatter
 from datetime import datetime
 
@@ -163,6 +163,12 @@ if __name__ == '__main__':
 	if not args.show_elastic_logger:
 		for _ in ("elasticsearch", "urllib3"):
 			logging.getLogger(_).setLevel(logging.CRITICAL)
+
+	pid = os.getpid()
+	def signal_handler(signal, frame):
+	        logging.error('You pressed Ctrl+C! Aborting execution.')
+        	os.kill(pid, 9)
+        signal.signal(signal.SIGINT, signal_handler)
 
 	loglevel = logging.DEBUG if args.debug else logging.INFO
 	logging.basicConfig(format='%(asctime)s %(message)s', level=loglevel)
