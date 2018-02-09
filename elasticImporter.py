@@ -207,14 +207,15 @@ if __name__ == '__main__':
 	documents = input_generator(cfg, index, doc_type, args)
 	ret = helpers.parallel_bulk(es, documents, raise_on_exception=args.raise_on_exception, thread_count=args.threads, queue_size=args.queue, chunk_size=args.bulk, raise_on_error=args.raise_on_error)
 	failed_items = []
-	failed = 0; success = 0;
+	failed = 0; success = 0; abs_ctr=0
 	for ok, item in ret:
+		abs_ctr+=1
 		#STATS
 		if ok:
 			success+=1	
 		else:
 			failed+=1
-			failed_items.append(item)
+			failed_items.append(abs_ctr)
 		#PROGRESS
 		if (success+failed)%100000 == 0:
 			logging.info('Success: {0}, Failed: {1}'.format(success, failed))
@@ -223,10 +224,7 @@ if __name__ == '__main__':
 
 	if failed > 0:
 		logging.error('There were some errors during the process: Success: {0}, Failed: {1}'.format(success, failed))
-		logging.error('These were the errors:')
-		for failed_item in failed_items:
-			sys.stderr.write('||{}||\n'.format(item))
-			
+		logging.error('These were the errors in lines: {}'.format(failed_items))
 
 	if args.refresh:
 		es.indices.refresh(index=index)
