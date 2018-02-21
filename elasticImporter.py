@@ -20,6 +20,8 @@ def parse_args():
 	#elastic connection stuff
 	parser.add_argument('-n', '--node', dest='node', required=False, default='localhost', help='Elasticsearch node. Default: localhost')
 	parser.add_argument('-p', '--port', dest='port', required=False, default=9200, help='Elasticsearch port. Default: 9200')
+	parser.add_argument('-u', '--user', dest='user', required=False, default=None, help='Elasticsearch user if needed.')
+	parser.add_argument('-P', '--password', dest='password', required=False, default='', help='Elasticsearch password if needed.')
 	#extra stuff to consider when indexing
 	parser.add_argument('--skip_first_line', dest='skip_first_line', default=False, action='store_true', help='Skips first line.')
 	parser.add_argument('--dates_in_seconds', dest='dates_in_seconds', default=False, action='store_true', help='If true, assume dates are provided in seconds.')
@@ -38,9 +40,18 @@ def parse_args():
 	parser.add_argument('--show_elastic_logger', dest='show_elastic_logger', default=False, action='store_true', help='If true show elastic logger at the same loglevel as the importer.')
 	parser.add_argument('--raise_on_error', dest='raise_on_error', default=False, action='store_true', help='Raise BulkIndexError containing errors (as .errors) from the execution of the last chunk when some occur. By default we DO NOT raise.')
 	parser.add_argument('--raise_on_exception', dest='raise_on_exception', default=False, action='store_true', help='By default we DO NOT propagate exceptions from call to bulk and just report the items that failed as failed. Use this option to propagate exceptions.')
-	#avoid duplicates
+	#stuff to avoid duplicates
 	parser.add_argument('--md5_id', dest='md5_id', default=False, action='store_true', help='Uses the MD5 hash of the line as ID.')
 	parser.add_argument('--md5_exclude', dest='md5_exclude', nargs = '*', required=False, default=[], help='List of column names to be excluded from the hash.')
+	#stuff to add geographical information from data fields
+	parser.add_argument('--geo_precission', dest='geo_precission', default=None, help='If set, geographical information will be added to the indexed documents. Possible values: country_level, multilevel, IP. If country_level is used in the geo_precission parameter, a column must be provided with either the country_code with 2 letters (ISO 3166-1 alpha-2) or the country_name in the format of the countries.csv file of the repository, for better results use country_code. If multilevel is set in the geo_precission option, then, a column or list of columns will be provided with either the country_code, country_name, region_name, city_name, or zip_code. If IP is set in the geo_precission option, then a column name containing IP addresses must be provided.')
+
+	parser.add_argument('--geo_column_country_code', dest='geo_column_country_code', default=None, help='Column name containing country codes with 2 letters (ISO 3166-1 alpha-2). Used if geo_precission is set to either country_level or multilevel.')
+	parser.add_argument('--geo_column_country_name', dest='geo_column_country_name', default=None, help='Column name containing country names. Used if geo_precission is set to either country_level or multilevel.')
+	parser.add_argument('--geo_column_region_name', dest='geo_column_region_name', default=None, help='Column name containing region names. Used if geo_precission is set to multilevel.')
+	parser.add_argument('--geo_column_city_name', dest='geo_column_city_name', default=None, help='Column name containing city names. Used if geo_precission is set to multilevel.')
+	parser.add_argument('--geo_column_zip_code', dest='geo_column_zip_code', default=None, help='Column name containing zip codes. Used if geo_precission is set to multilevel.')
+	parser.add_argument('--geo_column_ip', dest='geo_column_ip', default=None, help='Column name containing IP addresses. Used if geo_precission is set to IP.')
 	args = parser.parse_args()
 	return args
 
@@ -180,7 +191,10 @@ if __name__ == '__main__':
 	loglevel = logging.DEBUG if args.debug else logging.INFO
 	logging.basicConfig(format='%(asctime)s %(message)s', level=loglevel)
 
-	es = Elasticsearch(args.node, timeout=args.timeout, port=args.port)
+	if args.user is None:
+		es = Elasticsearch(args.node, timeout=args.timeout, port=args.port)
+	else:
+		es = Elasticsearch(args.node, timeout=args.timeout, port=args.port, http_auth=(args.user, args.password))
 	full_version = es.info()['version']['number']
 	version = int(full_version.split('.')[0])
 
@@ -199,7 +213,10 @@ if __name__ == '__main__':
 	#this class is used to initialize the mapping
 	DocClass = create_doc_class(cfg, doc_type)
 	#connection to elasticsearch
-	connections.create_connection(hosts=[args.node], timeout=args.timeout, port=args.port) #connection for api
+	if args.user is None:
+		connections.create_connection(hosts=[args.node], timeout=args.timeout, port=args.port) #connection for api
+	else:
+		connections.create_connection(hosts=[args.node], timeout=args.timeout, port=args.port, http_auth=(args.user, args.password)) #connection for api
 	#initialize mapping
 	index_obj = Index(index, using=es)
 	if not index_obj.exists():
