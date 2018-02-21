@@ -1,7 +1,13 @@
+# -*- coding: utf-8 -*-
+# encoding=utf8  
+import sys  
+if sys.version_info < (3,0,0):
+	reload(sys)  
+	sys.setdefaultencoding('utf8')
 from elasticsearch import Elasticsearch, helpers
 from elasticsearch_dsl import *
 from elasticsearch_dsl.connections import connections
-import fileinput, sys, logging, argparse, gc, codecs, json, math, hashlib, signal, os
+import fileinput, logging, argparse, gc, codecs, json, math, hashlib, signal, os
 from argparse import RawTextHelpFormatter
 from datetime import datetime
 
@@ -122,12 +128,12 @@ def parse_property(str_value, t, args):
 		elif t == 'float':
 			return float_value
 		else: # t == 'text' or t == 'keyword' or t == 'ip' or t == 'geopoint':
-			return str_value
+			return unicode(str_value)
 	except ValueError:
-		logging.warn('Error processing value |{}| of type |{}| ignoring this field.'.format(str_value, t))
+		logging.warn('ValueError processing value |{}| of type |{}| ignoring this field.'.format(str_value, t))
 		return None
 	except TypeError:
-		logging.warn('Error processing value |{}| of type |{}| ignoring this field.'.format(str_value, t))
+		logging.warn('TypeError processing value |{}| of type |{}| ignoring this field.'.format(str_value, t))
 		return None
 
 def input_generator(cfg, index, doc_type, args):
@@ -136,7 +142,7 @@ def input_generator(cfg, index, doc_type, args):
 	n_fields = len(cfg['order_in_file'])
 	try:
 		if args.input != '-':
-			f = codecs.open(args.input, buffering=1, encoding='latin-1')
+			f = codecs.open(args.input, buffering=1, encoding='utf-8')
 		else:
 			f = sys.stdin
 	except IOError as e:
@@ -186,7 +192,8 @@ if __name__ == '__main__':
 	def signal_handler(signal, frame):
 	        logging.error('You pressed Ctrl+C! Aborting execution.')
         	os.kill(pid, 9)
-        signal.signal(signal.SIGINT, signal_handler)
+
+	signal.signal(signal.SIGINT, signal_handler)
 
 	loglevel = logging.DEBUG if args.debug else logging.INFO
 	logging.basicConfig(format='%(asctime)s %(message)s', level=loglevel)
