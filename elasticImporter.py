@@ -4,13 +4,17 @@ import sys
 if sys.version_info < (3,0,0):
 	reload(sys)  
 	sys.setdefaultencoding('utf8')
+from six import iteritems
 from elasticsearch import Elasticsearch, helpers
 from elasticsearch_dsl import *
 from elasticsearch_dsl.connections import connections
-import fileinput, logging, argparse, gc, codecs, json, math, hashlib, signal, os
+import fileinput, logging, argparse, gc, codecs, json, math, hashlib, os, traceback
 from argparse import RawTextHelpFormatter
 from datetime import datetime
+from geodb import *
 
+log = logging.getLogger(__name__)
+logging.basicConfig(format='%(asctime)s %(message)s', level=logging.INFO)
 args = None
 translate_cfg_property = None
 version = None
@@ -58,8 +62,82 @@ def parse_args():
 	parser.add_argument('--geo_column_city_name', dest='geo_column_city_name', default=None, help='Column name containing city names. Used if geo_precission is set to multilevel.')
 	parser.add_argument('--geo_column_zip_code', dest='geo_column_zip_code', default=None, help='Column name containing zip codes. Used if geo_precission is set to multilevel.')
 	parser.add_argument('--geo_column_ip', dest='geo_column_ip', default=None, help='Column name containing IP addresses. Used if geo_precission is set to IP.')
+	parser.add_argument('--geo_int_ip', dest='geo_int_ip', default=False, help='Set if the provided IP addresses are integer numbers.')
+
 	args = parser.parse_args()
+
+	args.geo_precission = args.geo_precission.lower() if args.geo_precission is not None else args.geo_precission
+	if args.geo_precission not in ['ip', 'multilevel', 'country_level']:
+		log.error("Please, provide a valid --geo_precission option {'ip', 'multilevel', 'country_level'}.")
+		sys.exit(-1)
+
+	args.geo_fields = {}
+	if args.geo_precission == 'ip':
+		if args.geo_column_ip is not None:
+			args.geo_fields['ip'] = args.geo_column_ip
+	elif args.geo_precission == 'multilevel':
+		if args.geo_column_country_code is not None:
+			args.geo_fields['country_code'] = args.geo_column_country_code
+		if args.geo_column_country_name is not None:
+			args.geo_fields['country_name'] = args.geo_column_country_name
+		if args.geo_column_region_name is not None:
+			args.geo_fields['region_name'] = args.geo_column_region_name
+		if args.geo_column_city_name is not None:
+			args.geo_fields['city_name'] = args.geo_column_city_name
+		if args.geo_column_zip_code is not None:
+			args.geo_fields['zip_code'] = args.geo_column_zip_code
+	elif args.geo_precission == 'country_level':
+		if args.geo_column_country_code is not None:
+			args.geo_fields['country_code'] = args.geo_column_country_code
+		if args.geo_column_country_name is not None:
+			args.geo_fields['country_name'] = args.geo_column_country_name
+	if args.geo_precission is not None and len(args.geo_fields) == 0:
+		log.error('Please provide the --geo_column options')
+		sys.exit(-1)
+
+	args.geodb = load_geo_database(args.geo_precission)
+
 	return args
+
+#SYS STUFF
+def get_script_path():
+	return os.path.dirname(os.path.realpath(sys.argv[0]))
+
+#GEO LOCATION STUFF
+def get_geodata_field():
+	"""Creates a geodata field for the DocType considering the following format.
+	 {
+	 'city_name': 'MONTERREY',
+	 'country_code': 'MX',
+	 'country_name': 'MEXICO',
+	 'location': {'lat': 25.66667, 'lon': -100.31667},
+	 'region_name': 'NUEVO LEON',
+	 'representative_point': {'lat': 21.210829999999998, 'lon': -100.21194},
+	 'zip_code': '64830'
+	}
+	:return: A geodata field.
+	"""
+	#
+	extra_geo_fields = {}
+	#
+	extra_geo_fields['geo_city_name'] = translate_cfg_property('keyword')
+	extra_geo_fields['geo_country_code'] = translate_cfg_property('keyword')
+	extra_geo_fields['geo_country_name'] = translate_cfg_property('keyword')
+	extra_geo_fields['geo_region_name'] = translate_cfg_property('keyword')
+	extra_geo_fields['geo_zip_code'] = translate_cfg_property('keyword')
+	#location
+	extra_geo_fields['geo_location'] = translate_cfg_property('geopoint')
+	extra_geo_fields['geo_representative_point'] = translate_cfg_property('geopoint')
+	return extra_geo_fields
+
+def load_geo_database(level):
+	if level == 'country_level':
+		return CountryLevel_GeoDB('db0', '{}/db/countries.csv'.format(get_script_path()), '{}/db/geodb0.db'.format(get_script_path()), update=False)
+	if level == 'multilevel' or level == 'ip':
+		return ZIP_GeoIPDB('db9', '{}/db/IP2LOCATION-LITE-DB9.CSV.gz'.format(get_script_path()), '{}/db/geodb9.db'.format(get_script_path()), update=False)
+	return None
+
+#END OF GEO LOCATION STUFF
 
 def translate_cfg_property_2x(v):
 	if v == 'date':
@@ -97,17 +175,23 @@ def translate_cfg_property_std(v):
 	elif v == 'ip':
 		return Ip()
 
-def create_doc_class(cfg, doc_type):
+def create_doc_class(cfg, doc_type, geo=False):
 	#create class
 	dicc = {}
 	for k, v in cfg['properties'].items():
 		dicc[k] = translate_cfg_property(v)
+
+	if geo:
+		extra_geo_fields = get_geodata_field()
+		for key, value in iteritems(extra_geo_fields):
+			dicc[key] = value
+
 	DocClass = type(doc_type, (DocType,), dicc)
 	return DocClass
 
 def is_nan_or_inf(value):
 	if math.isinf(value) or math.isnan(value):
-		logging.debug('Nan or inf encountered in value: |{}|.'.format(value))
+		log.debug('Nan or inf encountered in value: |{}|.'.format(value))
 		return True
 	else:
 		return False
@@ -128,15 +212,15 @@ def parse_property(str_value, t, args):
 		elif t == 'float':
 			return float_value
 		else: # t == 'text' or t == 'keyword' or t == 'ip' or t == 'geopoint':
-			return unicode(str_value)
+			return str_value
 	except ValueError:
-		logging.warn('ValueError processing value |{}| of type |{}| ignoring this field.'.format(str_value, t))
+		log.warn('ValueError processing value |{}| of type |{}| ignoring this field.'.format(str_value, t))
 		return None
 	except TypeError:
-		logging.warn('TypeError processing value |{}| of type |{}| ignoring this field.'.format(str_value, t))
+		log.warn('TypeError processing value |{}| of type |{}| ignoring this field.'.format(str_value, t))
 		return None
 
-def input_generator(cfg, index, doc_type, args):
+def input_generator(cfg, index, doc_type, args): 
 	properties = cfg['properties']
 	fields = cfg['order_in_file']
 	n_fields = len(cfg['order_in_file'])
@@ -146,7 +230,7 @@ def input_generator(cfg, index, doc_type, args):
 		else:
 			f = sys.stdin
 	except IOError as e:
-		logging.error('Error with the input file |{}|, Details: {}.'.format(args.input, sys.exc_info()[0]))
+		log.error('Error with the input file |{}|, Details: {}.'.format(args.input, sys.exc_info()[0]))
 		return
 
 	ctr = 0
@@ -157,6 +241,24 @@ def input_generator(cfg, index, doc_type, args):
 			ctr+=1
 			sline = line.rstrip().split(args.separator)
 			dicc = {fields[i]: parse_property(value, properties[fields[i]], args) for i, value in enumerate(sline)}
+
+			if args.geo_precission is not None:
+				if args.geo_precission == 'ip':
+					geo_value = dicc.get(args.geo_column_ip, None)
+					geo_data = args.geodb.get_geodata('ip', geo_value, str_ip=(not args.geo_int_ip))
+				else:
+					geo_columns = []
+					geo_values = []
+					for db_column, text_column in iteritems(args.geo_fields):
+						geo_value = dicc.get(text_column, None)
+						if geo_value is not None:
+							geo_columns.append(db_column)
+							geo_values.append(geo_value.upper())
+					geo_data = args.geodb.get_geodata(geo_columns, geo_values)
+				if geo_data is not None:
+					for gkey, gvalue in iteritems(geo_data):
+						dicc['geo_'+gkey] = gvalue
+
 			#dicc = {k : dicc[k] for k in dicc if dicc[k] is not None} #remove nones
 			a = {
 				'_source' : dicc,
@@ -173,10 +275,12 @@ def input_generator(cfg, index, doc_type, args):
 
 			yield a
 		except ValueError as e:
-			logging.warn('Error processing line |{}| ({}). Ignoring line.'.format(line, ctr))
+			log.warn('ValueError processing line |{}| ({}). Ignoring line.'.format(line, ctr))
+			traceback.print_exc(file=sys.stderr)
 			continue
 		except Exception as e:
-			logging.warn('Error processing line |{}| ({}). Ignoring line. Details {}'.format(line, ctr, sys.exc_info()[0]))
+			log.warn('Error processing line |{}| ({}). Ignoring line. Details {}'.format(line, ctr, sys.exc_info()[0]))
+			traceback.print_exc(file=sys.stderr)
 			continue
 
 if __name__ == '__main__':
@@ -188,15 +292,11 @@ if __name__ == '__main__':
 		for _ in ("elasticsearch", "urllib3"):
 			logging.getLogger(_).setLevel(logging.CRITICAL)
 
-	pid = os.getpid()
-	def signal_handler(signal, frame):
-			logging.error('You pressed Ctrl+C! Aborting execution.')
-			os.kill(pid, 9)
-
-	signal.signal(signal.SIGINT, signal_handler)
-
+	#signal.signal(signal.SIGINT, signal_handler)
+	loggers = [log, logging.getLogger('geodb')]
 	loglevel = logging.DEBUG if args.debug else logging.INFO
-	logging.basicConfig(format='%(asctime)s %(message)s', level=loglevel)
+	for logger in loggers:
+		logger.setLevel(loglevel)
 
 	if args.user is None:
 		es = Elasticsearch(args.node, timeout=args.timeout, port=args.port)
@@ -206,9 +306,9 @@ if __name__ == '__main__':
 	version = int(full_version.split('.')[0])
 
 	if version == 1:
-		logging.error('Elasticsearch version 1.x is not supported.')
+		log.error('Elasticsearch version 1.x is not supported.')
 
-	logging.info('Using elasticsearch version {}'.format(full_version))
+	log.info('Using elasticsearch version {}'.format(full_version))
 
 	translate_cfg_property = translate_cfg_property_2x if version == 2 else translate_cfg_property_std
 
@@ -218,7 +318,7 @@ if __name__ == '__main__':
 	doc_type = str(cfg['meta']['type']) if args.type is None else args.type
 	#create class from the cfg
 	#this class is used to initialize the mapping
-	DocClass = create_doc_class(cfg, doc_type)
+	DocClass = create_doc_class(cfg, doc_type, geo=args.geo_precission is not None)
 	#connection to elasticsearch
 	if args.user is None:
 		connections.create_connection(hosts=[args.node], timeout=args.timeout, port=args.port) #connection for api
@@ -249,13 +349,13 @@ if __name__ == '__main__':
 			failed_items.append(abs_ctr)
 		#PROGRESS
 		if (success+failed)%100000 == 0:
-			logging.info('Success: {0}, Failed: {1}'.format(success, failed))
+			log.info('Success: {0}, Failed: {1}'.format(success, failed))
 
-	logging.info('Success: {0}, Failed: {1}'.format(success, failed))
+	log.info('Success: {0}, Failed: {1}'.format(success, failed))
 
 	if failed > 0:
-		logging.error('There were some errors during the process: Success: {0}, Failed: {1}'.format(success, failed))
-		logging.error('These were the errors in lines: {}'.format(failed_items))
+		log.error('There were some errors during the process: Success: {0}, Failed: {1}'.format(success, failed))
+		log.error('These were the errors in lines: {}'.format(failed_items))
 
 	if args.refresh:
 		es.indices.refresh(index=index)
