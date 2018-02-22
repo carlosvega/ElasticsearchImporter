@@ -190,8 +190,8 @@ if __name__ == '__main__':
 
 	pid = os.getpid()
 	def signal_handler(signal, frame):
-	        logging.error('You pressed Ctrl+C! Aborting execution.')
-        	os.kill(pid, 9)
+			logging.error('You pressed Ctrl+C! Aborting execution.')
+			os.kill(pid, 9)
 
 	signal.signal(signal.SIGINT, signal_handler)
 
@@ -228,9 +228,9 @@ if __name__ == '__main__':
 	index_obj = Index(index, using=es)
 	if not index_obj.exists():
 		index_obj.settings(
-		    number_of_replicas=args.replicas,
-		    number_of_shards=args.shards,
-		    refresh_interval=args.refresh_interval
+			number_of_replicas=args.replicas,
+			number_of_shards=args.shards,
+			refresh_interval=args.refresh_interval
 		)
 		index_obj.save()
 	DocClass.init(index=index, using=es)
