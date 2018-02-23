@@ -130,7 +130,7 @@ def parse_property(str_value, t, args):
 		elif t == 'float':
 			return float_value
 		else: # t == 'text' or t == 'keyword' or t == 'ip' or t == 'geopoint':
-			return unicode(str_value)
+			return str_value
 	except ValueError:
 		logging.warn('ValueError processing value |{}| of type |{}| ignoring this field.'.format(str_value, t))
 		return None
