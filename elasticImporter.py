@@ -116,6 +116,8 @@ numeric_properties = set(('integer', 'long', 'date', 'float'))
 def parse_property(str_value, t, args):
 	try:
 		if t in numeric_properties:
+			if str_value == '':
+				return None
 			float_value = float(str_value)
 			if is_nan_or_inf(float_value):
 				return None
