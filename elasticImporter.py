@@ -7,7 +7,7 @@ if sys.version_info < (3,0,0):
 from elasticsearch import Elasticsearch, helpers
 from elasticsearch_dsl import *
 from elasticsearch_dsl.connections import connections
-import fileinput, logging, argparse, gc, codecs, json, math, hashlib, signal, os
+import fileinput, logging, argparse, gc, codecs, json, math, hashlib, signal, os, traceback
 from argparse import RawTextHelpFormatter
 from datetime import datetime
 
@@ -152,34 +152,40 @@ def input_generator(cfg, index, doc_type, args):
 		return
 
 	ctr = 0
-	for line in f:
-		try:
-			if ctr == 0 and args.skip_first_line:
+	try:
+		for line in f:
+			try:
+				if ctr == 0 and args.skip_first_line:
+					continue
+				ctr+=1
+				sline = line.rstrip().split(args.separator)
+				dicc = {fields[i]: parse_property(value, properties[fields[i]], args) for i, value in enumerate(sline)}
+				#dicc = {k : dicc[k] for k in dicc if dicc[k] is not None} #remove nones
+				a = {
+					'_source' : dicc,
+					'_index'  : index,
+					'_type'   : doc_type
+				}
+
+				if args.md5_id:
+					md5_dicc = {}
+					for idx, field in enumerate(fields):
+						if field not in args.md5_exclude:
+							md5_dicc[field] = dicc[field]
+					a['_id'] = hashlib.md5(json.dumps(md5_dicc)).hexdigest()
+				yield a
+
+			except ValueError as e:
+				logging.warn('Error processing line |{}| ({}). Ignoring line.'.format(line, ctr))
 				continue
-			ctr+=1
-			sline = line.rstrip().split(args.separator)
-			dicc = {fields[i]: parse_property(value, properties[fields[i]], args) for i, value in enumerate(sline)}
-			#dicc = {k : dicc[k] for k in dicc if dicc[k] is not None} #remove nones
-			a = {
-				'_source' : dicc,
-				'_index'  : index,
-				'_type'   : doc_type
-			}
-
-			if args.md5_id:
-				md5_dicc = {}
-				for idx, field in enumerate(fields):
-					if field not in args.md5_exclude:
-						md5_dicc[field] = dicc[field]
-				a['_id'] = hashlib.md5(json.dumps(md5_dicc)).hexdigest()
-
-			yield a
-		except ValueError as e:
-			logging.warn('Error processing line |{}| ({}). Ignoring line.'.format(line, ctr))
-			continue
-		except Exception as e:
-			logging.warn('Error processing line |{}| ({}). Ignoring line. Details {}'.format(line, ctr, sys.exc_info()[0]))
-			continue
+			except Exception as e:
+				logging.warn('Error processing line |{}| ({}). Ignoring line. Details {}'.format(line, ctr, sys.exc_info()[0]))
+				traceback.print_exc(file=sys.stderr)
+				continue
+	except UnicodeDecodeError as e: 
+		logging.warn('UnicodeDecodeError processing the line after |{}| ({})'.format(line, ctr, sys.exc_info()[0]))
+		traceback.print_exc(file=sys.stderr)
+		return
 
 if __name__ == '__main__':
 	#load parameters
@@ -198,7 +204,8 @@ if __name__ == '__main__':
 	signal.signal(signal.SIGINT, signal_handler)
 
 	loglevel = logging.DEBUG if args.debug else logging.INFO
-	logging.basicConfig(format='%(asctime)s %(message)s', level=loglevel)
+	logging.basicConfig(format="[ %(asctime)s %(levelname)s %(threadName)s ] " + "%(message)s", level=loglevel)
+	#logging.basicConfig(format='%(asctime)s %(message)s', level=loglevel)
 
 	if args.user is None:
 		es = Elasticsearch(args.node, timeout=args.timeout, port=args.port)
