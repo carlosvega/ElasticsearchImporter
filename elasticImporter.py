@@ -144,7 +144,7 @@ def input_generator(cfg, index, doc_type, args):
 	n_fields = len(cfg['order_in_file'])
 	try:
 		if args.input != '-':
-			f = codecs.open(args.input, buffering=1, encoding='utf-8')
+			f = codecs.open(args.input, buffering=1, encoding='utf-8', errors='ignore')
 		else:
 			f = sys.stdin
 	except IOError as e:
