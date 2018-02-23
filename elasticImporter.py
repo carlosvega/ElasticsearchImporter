@@ -250,7 +250,7 @@ if __name__ == '__main__':
 			failed+=1
 			failed_items.append(abs_ctr)
 		#PROGRESS
-		if (success+failed)%100000 == 0:
+		if (success+failed)%10000 == 0:
 			logging.info('Success: {0}, Failed: {1}'.format(success, failed))
 
 	logging.info('Success: {0}, Failed: {1}'.format(success, failed))
