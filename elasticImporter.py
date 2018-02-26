@@ -11,6 +11,8 @@ import fileinput, logging, argparse, gc, codecs, json, math, hashlib, signal, os
 from argparse import RawTextHelpFormatter
 from datetime import datetime
 
+log = logging.getLogger(__name__)
+logging.basicConfig(format='%(asctime)s %(message)s', level=logging.INFO)
 args = None
 translate_cfg_property = None
 version = None
@@ -44,6 +46,7 @@ def parse_args():
 	parser.add_argument('--timeout', dest='timeout', required=False, default=600, help='Connection timeout in seconds. Default: 600')
 	#internal stuff for the elastic API
 	parser.add_argument('--debug', dest='debug', default=False, action='store_true', help='If true log level is set to DEBUG.')
+	parser.add_argument('--no_progress', dest='noprogress', default=False, action='store_true', help='If true do not show progress.')
 	parser.add_argument('--show_elastic_logger', dest='show_elastic_logger', default=False, action='store_true', help='If true show elastic logger at the same loglevel as the importer.')
 	parser.add_argument('--raise_on_error', dest='raise_on_error', default=False, action='store_true', help='Raise BulkIndexError containing errors (as .errors) from the execution of the last chunk when some occur. By default we DO NOT raise.')
 	parser.add_argument('--raise_on_exception', dest='raise_on_exception', default=False, action='store_true', help='By default we DO NOT propagate exceptions from call to bulk and just report the items that failed as failed. Use this option to propagate exceptions.')
@@ -99,7 +102,7 @@ def create_doc_class(cfg, doc_type):
 
 def is_nan_or_inf(value):
 	if math.isinf(value) or math.isnan(value):
-		logging.debug('Nan or inf encountered in value: |{}|.'.format(value))
+		log.debug('Nan or inf encountered in value: |{}|.'.format(value))
 		return True
 	else:
 		return False
@@ -124,10 +127,10 @@ def parse_property(str_value, t, args):
 		else: # t == 'text' or t == 'keyword' or t == 'ip' or t == 'geopoint':
 			return str_value
 	except ValueError:
-		logging.warn('ValueError processing value |{}| of type |{}| ignoring this field.'.format(str_value, t))
+		log.warning('ValueError processing value |{}| of type |{}| ignoring this field.'.format(str_value, t))
 		return None
 	except TypeError:
-		logging.warn('TypeError processing value |{}| of type |{}| ignoring this field.'.format(str_value, t))
+		log.warning('TypeError processing value |{}| of type |{}| ignoring this field.'.format(str_value, t))
 		return None
 
 def input_generator(cfg, index, doc_type, args):
@@ -140,7 +143,7 @@ def input_generator(cfg, index, doc_type, args):
 		else:
 			f = sys.stdin
 	except IOError as e:
-		logging.error('Error with the input file |{}|, Details: {}.'.format(args.input, sys.exc_info()[0]))
+		log.error('Error with the input file |{}|, Details: {}.'.format(args.input, sys.exc_info()[0]))
 		return
 
 	ctr = 0
@@ -168,14 +171,14 @@ def input_generator(cfg, index, doc_type, args):
 				yield a
 
 			except ValueError as e:
-				logging.warn('Error processing line |{}| ({}). Ignoring line.'.format(line, ctr))
+				log.warning('Error processing line |{}| ({}). Ignoring line.'.format(line, ctr))
 				continue
 			except Exception as e:
-				logging.warn('Error processing line |{}| ({}). Ignoring line. Details {}'.format(line, ctr, sys.exc_info()[0]))
+				log.warning('Error processing line |{}| ({}). Ignoring line. Details {}'.format(line, ctr, sys.exc_info()[0]))
 				traceback.print_exc(file=sys.stderr)
 				continue
 	except UnicodeDecodeError as e:
-		logging.warn('UnicodeDecodeError processing the line after |{}| ({})'.format(line, ctr, sys.exc_info()[0]))
+		log.warning('UnicodeDecodeError processing the line after |{}| ({})'.format(line, ctr, sys.exc_info()[0]))
 		traceback.print_exc(file=sys.stderr)
 		return
 
@@ -183,21 +186,26 @@ if __name__ == '__main__':
 	#load parameters
 	args = parse_args()
 
+	pid = os.getpid()
+	def signal_handler(signal, frame):
+			log.error('You pressed Ctrl+C! Aborting execution.')
+			os.kill(pid, 9)
+
+	signal.signal(signal.SIGINT, signal_handler)
+
 	#set up loggers
 	if not args.show_elastic_logger:
 		for _ in ("elasticsearch", "urllib3"):
 			logging.getLogger(_).setLevel(logging.CRITICAL)
 
-	pid = os.getpid()
-	def signal_handler(signal, frame):
-			logging.error('You pressed Ctrl+C! Aborting execution.')
-			os.kill(pid, 9)
-
-	signal.signal(signal.SIGINT, signal_handler)
-
 	loglevel = logging.DEBUG if args.debug else logging.INFO
 	logging.basicConfig(format="[ %(asctime)s %(levelname)s %(threadName)s ] " + "%(message)s", level=loglevel)
 	#logging.basicConfig(format='%(asctime)s %(message)s', level=loglevel)
+
+	loggers = [log]
+	loglevel = logging.DEBUG if args.debug else logging.INFO
+	for logger in loggers:
+		logger.setLevel(loglevel)
 
 	if args.user is None:
 		es = Elasticsearch(args.node, timeout=args.timeout, port=args.port)
@@ -207,9 +215,9 @@ if __name__ == '__main__':
 	version = int(full_version.split('.')[0])
 
 	if version == 1:
-		logging.error('Elasticsearch version 1.x is not supported.')
+		log.error('Elasticsearch version 1.x is not supported.')
 
-	logging.info('Using elasticsearch version {}'.format(full_version))
+	log.info('Using elasticsearch version {}'.format(full_version))
 
 	translate_cfg_property = translate_cfg_property_2x if version == 2 else translate_cfg_property_std
 
@@ -228,7 +236,7 @@ if __name__ == '__main__':
 
 	#delete before doing anything else
 	if args.delete:
-		logging.warning('Deleting index {} whether it exists or not...'.format(index))
+		log.warning('Deleting index {} whether it exists or not...'.format(index))
 		es.indices.delete(index=index, ignore=[400, 404])
 	#initialize mapping
 	index_obj = Index(index, using=es)
@@ -254,14 +262,14 @@ if __name__ == '__main__':
 			failed+=1
 			failed_items.append(abs_ctr)
 		#PROGRESS
-		if (success+failed)%10000 == 0:
-			logging.info('Success: {0}, Failed: {1}'.format(success, failed))
+		if (success+failed)%10000 == 0 and not args.noprogress:
+			log.info('Success: {0}, Failed: {1}'.format(success, failed))
 
-	logging.info('Success: {0}, Failed: {1}'.format(success, failed))
+	log.info('Success: {0}, Failed: {1}'.format(success, failed))
 
 	if failed > 0:
-		logging.error('There were some errors during the process: Success: {0}, Failed: {1}'.format(success, failed))
-		logging.error('These were the errors in lines: {}'.format(failed_items))
+		log.error('There were some errors during the process: Success: {0}, Failed: {1}'.format(success, failed))
+		log.error('These were the errors in lines: {}'.format(failed_items))
 
 	if args.refresh:
 		es.indices.refresh(index=index)
