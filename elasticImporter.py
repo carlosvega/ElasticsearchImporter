@@ -228,7 +228,7 @@ if __name__ == '__main__':
 
 	#delete before doing anything else
 	if args.delete:
-		log.warning('Deleting index {} whether it exists or not...'.format(index))
+		logging.warning('Deleting index {} whether it exists or not...'.format(index))
 		es.indices.delete(index=index, ignore=[400, 404])
 	#initialize mapping
 	index_obj = Index(index, using=es)
