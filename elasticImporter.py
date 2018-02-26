@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-# encoding=utf8  
-import sys  
+# encoding=utf8
+import sys
 if sys.version_info < (3,0,0):
-	reload(sys)  
+	reload(sys)
 	sys.setdefaultencoding('utf8')
 from elasticsearch import Elasticsearch, helpers
 from elasticsearch_dsl import *
@@ -32,6 +32,7 @@ def parse_args():
 	parser.add_argument('--skip_first_line', dest='skip_first_line', default=False, action='store_true', help='Skips first line.')
 	parser.add_argument('--dates_in_seconds', dest='dates_in_seconds', default=False, action='store_true', help='If true, assume dates are provided in seconds.')
 	parser.add_argument('--refresh', dest='refresh', default=False, action='store_true', help='Refresh the index when finished.')
+	parser.add_argument('--delete', dest='delete', default=False, action='store_true', help='Delete the index before process.')
 	#meta stuff to consider when creating indices
 	parser.add_argument('--replicas', dest='replicas', default=0, help='Number of replicas for the index if it does not exist. Default: 0')
 	parser.add_argument('--shards', dest='shards', default=2, help='Number of shards for the index if it does not exist. Default: 2')
@@ -49,15 +50,6 @@ def parse_args():
 	#stuff to avoid duplicates
 	parser.add_argument('--md5_id', dest='md5_id', default=False, action='store_true', help='Uses the MD5 hash of the line as ID.')
 	parser.add_argument('--md5_exclude', dest='md5_exclude', nargs = '*', required=False, default=[], help='List of column names to be excluded from the hash.')
-	#stuff to add geographical information from data fields
-	parser.add_argument('--geo_precission', dest='geo_precission', default=None, help='If set, geographical information will be added to the indexed documents. Possible values: country_level, multilevel, IP. If country_level is used in the geo_precission parameter, a column must be provided with either the country_code with 2 letters (ISO 3166-1 alpha-2) or the country_name in the format of the countries.csv file of the repository, for better results use country_code. If multilevel is set in the geo_precission option, then, a column or list of columns will be provided with either the country_code, country_name, region_name, city_name, or zip_code. If IP is set in the geo_precission option, then a column name containing IP addresses must be provided.')
-
-	parser.add_argument('--geo_column_country_code', dest='geo_column_country_code', default=None, help='Column name containing country codes with 2 letters (ISO 3166-1 alpha-2). Used if geo_precission is set to either country_level or multilevel.')
-	parser.add_argument('--geo_column_country_name', dest='geo_column_country_name', default=None, help='Column name containing country names. Used if geo_precission is set to either country_level or multilevel.')
-	parser.add_argument('--geo_column_region_name', dest='geo_column_region_name', default=None, help='Column name containing region names. Used if geo_precission is set to multilevel.')
-	parser.add_argument('--geo_column_city_name', dest='geo_column_city_name', default=None, help='Column name containing city names. Used if geo_precission is set to multilevel.')
-	parser.add_argument('--geo_column_zip_code', dest='geo_column_zip_code', default=None, help='Column name containing zip codes. Used if geo_precission is set to multilevel.')
-	parser.add_argument('--geo_column_ip', dest='geo_column_ip', default=None, help='Column name containing IP addresses. Used if geo_precission is set to IP.')
 	args = parser.parse_args()
 	return args
 
@@ -182,7 +174,7 @@ def input_generator(cfg, index, doc_type, args):
 				logging.warn('Error processing line |{}| ({}). Ignoring line. Details {}'.format(line, ctr, sys.exc_info()[0]))
 				traceback.print_exc(file=sys.stderr)
 				continue
-	except UnicodeDecodeError as e: 
+	except UnicodeDecodeError as e:
 		logging.warn('UnicodeDecodeError processing the line after |{}| ({})'.format(line, ctr, sys.exc_info()[0]))
 		traceback.print_exc(file=sys.stderr)
 		return
@@ -198,8 +190,8 @@ if __name__ == '__main__':
 
 	pid = os.getpid()
 	def signal_handler(signal, frame):
-	        logging.error('You pressed Ctrl+C! Aborting execution.')
-        	os.kill(pid, 9)
+			logging.error('You pressed Ctrl+C! Aborting execution.')
+			os.kill(pid, 9)
 
 	signal.signal(signal.SIGINT, signal_handler)
 
@@ -233,13 +225,18 @@ if __name__ == '__main__':
 		connections.create_connection(hosts=[args.node], timeout=args.timeout, port=args.port) #connection for api
 	else:
 		connections.create_connection(hosts=[args.node], timeout=args.timeout, port=args.port, http_auth=(args.user, args.password)) #connection for api
+
+	#delete before doing anything else
+	if args.delete:
+		log.warning('Deleting index {} whether it exists or not...'.format(index))
+		es.indices.delete(index=index, ignore=[400, 404])
 	#initialize mapping
 	index_obj = Index(index, using=es)
 	if not index_obj.exists():
 		index_obj.settings(
-		    number_of_replicas=args.replicas,
-		    number_of_shards=args.shards,
-		    refresh_interval=args.refresh_interval
+			number_of_replicas=args.replicas,
+			number_of_shards=args.shards,
+			refresh_interval=args.refresh_interval
 		)
 		index_obj.save()
 	DocClass.init(index=index, using=es)
@@ -252,7 +249,7 @@ if __name__ == '__main__':
 		abs_ctr+=1
 		#STATS
 		if ok:
-			success+=1	
+			success+=1
 		else:
 			failed+=1
 			failed_items.append(abs_ctr)
