@@ -10,13 +10,13 @@ from six import iteritems
 from elasticsearch import Elasticsearch, helpers
 from elasticsearch_dsl import *
 from elasticsearch_dsl.connections import connections
-import fileinput, logging, argparse, gc, codecs, json, math, hashlib, os, traceback
+import fileinput, logging, argparse, gc, codecs, json, math, hashlib, signal, os, traceback
 from argparse import RawTextHelpFormatter
 from datetime import datetime
 from geodb import *
 
 log = logging.getLogger(__name__)
-logging.basicConfig(format='%(asctime)s %(message)s', level=logging.INFO)
+logging.basicConfig(format="[ %(asctime)s %(levelname)s %(threadName)s ] " + "%(message)s", level=logging.INFO)
 args = None
 translate_cfg_property = None
 es_version = None
@@ -44,6 +44,7 @@ def parse_args():
 	parser.add_argument('--skip_first_line', dest='skip_first_line', default=False, action='store_true', help='Skips first line.')
 	parser.add_argument('--dates_in_seconds', dest='dates_in_seconds', default=False, action='store_true', help='If true, assume dates are provided in seconds.')
 	parser.add_argument('--refresh', dest='refresh', default=False, action='store_true', help='Refresh the index when finished.')
+	parser.add_argument('--delete', dest='delete', default=False, action='store_true', help='Delete the index before process.')
 	#meta stuff to consider when creating indices
 	parser.add_argument('--replicas', dest='replicas', default=0, help='Number of replicas for the index if it does not exist. Default: 0')
 	parser.add_argument('--shards', dest='shards', default=2, help='Number of shards for the index if it does not exist. Default: 2')
@@ -55,12 +56,14 @@ def parse_args():
 	parser.add_argument('--timeout', dest='timeout', required=False, default=600, help='Connection timeout in seconds. Default: 600')
 	#internal stuff for the elastic API
 	parser.add_argument('--debug', dest='debug', default=False, action='store_true', help='If true log level is set to DEBUG.')
+	parser.add_argument('--no_progress', dest='noprogress', default=False, action='store_true', help='If true do not show progress.')
 	parser.add_argument('--show_elastic_logger', dest='show_elastic_logger', default=False, action='store_true', help='If true show elastic logger at the same loglevel as the importer.')
 	parser.add_argument('--raise_on_error', dest='raise_on_error', default=False, action='store_true', help='Raise BulkIndexError containing errors (as .errors) from the execution of the last chunk when some occur. By default we DO NOT raise.')
 	parser.add_argument('--raise_on_exception', dest='raise_on_exception', default=False, action='store_true', help='By default we DO NOT propagate exceptions from call to bulk and just report the items that failed as failed. Use this option to propagate exceptions.')
 	#stuff to avoid duplicates
 	parser.add_argument('--md5_id', dest='md5_id', default=False, action='store_true', help='Uses the MD5 hash of the line as ID.')
 	parser.add_argument('--md5_exclude', dest='md5_exclude', nargs = '*', required=False, default=[], help='List of column names to be excluded from the hash.')
+
 	#stuff to add geographical information from data fields
 	parser.add_argument('--geo_precission', dest='geo_precission', default=None, help='If set, geographical information will be added to the indexed documents. Possible values: country_level, multilevel, IP. If country_level is used in the geo_precission parameter, a column must be provided with either the country_code with 2 letters (ISO 3166-1 alpha-2) or the country_name in the format of the countries.csv file of the repository, for better results use country_code. If multilevel is set in the geo_precission option, then, a column or list of columns must be provided with either the country_code, region_name, city_name, or zip_code. If IP is set in the geo_precission option, then a column name containing IP addresses must be provided.')
 
@@ -251,6 +254,8 @@ numeric_properties = set(('integer', 'long', 'date', 'float'))
 def parse_property(str_value, t, args):
 	try:
 		if t in numeric_properties:
+			if str_value == '':
+				return None
 			float_value = float(str_value)
 			if is_nan_or_inf(float_value):
 				return None
@@ -265,10 +270,10 @@ def parse_property(str_value, t, args):
 		else: # t == 'text' or t == 'keyword' or t == 'ip' or t == 'geopoint':
 			return str_value
 	except ValueError:
-		log.warn('ValueError processing value |{}| of type |{}| ignoring this field.'.format(str_value, t))
+		log.warning('ValueError processing value |{}| of type |{}| ignoring this field.'.format(str_value, t))
 		return None
 	except TypeError:
-		log.warn('TypeError processing value |{}| of type |{}| ignoring this field.'.format(str_value, t))
+		log.warning('TypeError processing value |{}| of type |{}| ignoring this field.'.format(str_value, t))
 		return None
 
 def input_generator(cfg, index, doc_type, args):
@@ -277,7 +282,7 @@ def input_generator(cfg, index, doc_type, args):
 	n_fields = len(cfg['order_in_file'])
 	try:
 		if args.input != '-':
-			f = codecs.open(args.input, buffering=1, encoding='utf-8')
+			f = codecs.open(args.input, buffering=1, encoding='utf-8', errors='ignore')
 		else:
 			f = sys.stdin
 	except IOError as e:
@@ -285,67 +290,82 @@ def input_generator(cfg, index, doc_type, args):
 		return
 
 	ctr = 0
-	for line in f:
-		try:
-			if ctr == 0 and args.skip_first_line:
+
+	try:
+
+		for line in f:
+			try:
+				if ctr == 0 and args.skip_first_line:
+					continue
+				ctr+=1
+				sline = line.rstrip().split(args.separator)
+				dicc = {fields[i]: parse_property(value, properties[fields[i]], args) for i, value in enumerate(sline)}
+
+				if args.geo_precission is not None:
+					if args.geo_precission == 'ip':
+						geo_value = dicc.get(args.geo_column_ip, None)
+						geo_data = args.geodb.get_geodata('ip', geo_value, str_ip=(not args.geo_int_ip))
+					else:
+						geo_columns = []
+						geo_values = []
+						for db_column, text_column in iteritems(args.geo_fields):
+							geo_value = dicc.get(text_column, None)
+							if geo_value is not None:
+								geo_columns.append(db_column)
+								geo_values.append(geo_value.upper())
+						geo_data = args.geodb.get_geodata(geo_columns, geo_values)
+					if geo_data is not None:
+						for gkey, gvalue in iteritems(geo_data):
+							dicc['geo_'+gkey] = gvalue
+
+				#dicc = {k : dicc[k] for k in dicc if dicc[k] is not None} #remove nones
+				a = {
+					'_source' : dicc,
+					'_index'  : index,
+					'_type'   : doc_type
+				}
+
+				if args.md5_id:
+					md5_dicc = {}
+					for idx, field in enumerate(fields):
+						if field not in args.md5_exclude:
+							md5_dicc[field] = dicc[field]
+					a['_id'] = hashlib.md5(json.dumps(md5_dicc)).hexdigest()
+				yield a
+
+			except ValueError as e:
+				log.warning('Error processing line |{}| ({}). Ignoring line.'.format(line, ctr))
 				continue
-			ctr+=1
-			sline = line.rstrip().split(args.separator)
-			dicc = {fields[i]: parse_property(value, properties[fields[i]], args) for i, value in enumerate(sline)}
-
-			if args.geo_precission is not None:
-				if args.geo_precission == 'ip':
-					geo_value = dicc.get(args.geo_column_ip, None)
-					geo_data = args.geodb.get_geodata('ip', geo_value, str_ip=(not args.geo_int_ip))
-				else:
-					geo_columns = []
-					geo_values = []
-					for db_column, text_column in iteritems(args.geo_fields):
-						geo_value = dicc.get(text_column, None)
-						if geo_value is not None:
-							geo_columns.append(db_column)
-							geo_values.append(geo_value.upper())
-					geo_data = args.geodb.get_geodata(geo_columns, geo_values)
-				if geo_data is not None:
-					for gkey, gvalue in iteritems(geo_data):
-						dicc['geo_'+gkey] = gvalue
-
-			#dicc = {k : dicc[k] for k in dicc if dicc[k] is not None} #remove nones
-			a = {
-				'_source' : dicc,
-				'_index'  : index,
-				'_type'   : doc_type
-			}
-
-			if args.md5_id:
-				md5_dicc = {}
-				for idx, field in enumerate(fields):
-					if field not in args.md5_exclude:
-						md5_dicc[field] = dicc[field]
-				a['_id'] = hashlib.md5(json.dumps(md5_dicc)).hexdigest()
-
-			yield a
-		except ValueError as e:
-			log.warn('ValueError processing line |{}| ({}). Ignoring line.'.format(line, ctr))
-			traceback.print_exc(file=sys.stderr)
-			continue
-		except Exception as e:
-			log.warn('Error processing line |{}| ({}). Ignoring line. Details {}'.format(line, ctr, sys.exc_info()[0]))
-			traceback.print_exc(file=sys.stderr)
-			continue
+			except Exception as e:
+				log.warning('Error processing line |{}| ({}). Ignoring line. Details {}'.format(line, ctr, sys.exc_info()[0]))
+				traceback.print_exc(file=sys.stderr)
+				continue
+	except UnicodeDecodeError as e:
+		log.warning('UnicodeDecodeError processing the line after |{}| ({})'.format(line, ctr, sys.exc_info()[0]))
+		traceback.print_exc(file=sys.stderr)
+		return
 
 if __name__ == '__main__':
 	#load parameters
 	args = parse_args()
+
+	pid = os.getpid()
+	def signal_handler(signal, frame):
+			log.error('You pressed Ctrl+C! Aborting execution.')
+			os.kill(pid, 9)
+
+	signal.signal(signal.SIGINT, signal_handler)
 
 	#set up loggers
 	if not args.show_elastic_logger:
 		for _ in ("elasticsearch", "urllib3"):
 			logging.getLogger(_).setLevel(logging.CRITICAL)
 
-	#signal.signal(signal.SIGINT, signal_handler)
 	loggers = [log, logging.getLogger('geodb')]
 	loglevel = logging.DEBUG if args.debug else logging.INFO
+	logging.basicConfig(format="[ %(asctime)s %(levelname)s %(threadName)s ] " + "%(message)s", level=loglevel)
+	#logging.basicConfig(format='%(asctime)s %(message)s', level=loglevel)
+
 	for logger in loggers:
 		logger.setLevel(loglevel)
 
@@ -374,7 +394,13 @@ if __name__ == '__main__':
 	if args.user is None:
 		connections.create_connection(hosts=[args.node], timeout=args.timeout, port=args.port) #connection for api
 	else:
-		connections.create_connection(hosts=[args is not None.node], timeout=args.timeout, port=args.port, http_auth=(args.user, args.password)) #connection for apgeoi
+		connections.create_connection(hosts=[args.node], timeout=args.timeout, port=args.port, http_auth=(args.user, args.password)) #connection for api
+
+	#delete before doing anything else
+	if args.delete:
+		log.warning('Deleting index {} whether it exists or not...'.format(index))
+		es.indices.delete(index=index, ignore=[400, 404])
+
 	#initialize mapping
 	index_obj = Index(index, using=es)
 	if not index_obj.exists():
@@ -399,7 +425,7 @@ if __name__ == '__main__':
 			failed+=1
 			failed_items.append(abs_ctr)
 		#PROGRESS
-		if (success+failed)%100000 == 0:
+		if (success+failed)%10000 == 0 and not args.noprogress:
 			log.info('Success: {0}, Failed: {1}'.format(success, failed))
 
 	log.info('Success: {0}, Failed: {1}'.format(success, failed))

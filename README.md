@@ -75,7 +75,7 @@ On a Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz with 32GB of RAM using Elasticsearc
 Executing a 10 Million lines test:
 
 ```Bash
-yes '1509750000000;52.5720661, 52.5720661;192.168.1.1;PotatoFriend;This is a potato and it is your friend;20;201.1' | head --10000000 | pv -l | time python elasticImporter.py -c example.cfg                                                             
+yes '1509750000000;52.5720661, 52.5720661;192.168.1.1;PotatoFriend;This is a potato and it is your friend;20;201.1' | head -10000000 | pv -l | time python elasticImporter.py -c example.cfg                                                             
 ```
 
 Python: 37871.615 lines/s
