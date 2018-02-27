@@ -12,12 +12,10 @@ def in_net(ipint, net):
 	return ipint & maskint == netint
 
 # http://stackoverflow.com/a/9591005
-def ip2int(ip_o):
+def ip2int(ip):
 	"""Convert an IP in dot-decimal notation to int.
 	:param ip: string.
 	"""
-	ip = str(ip_o) if isinstance(ip_o, unicode) else ip_o
-
 	if not isinstance(ip, str):
 			raise ValueError("ip must be str and is {0} instead".format(type(ip)))
 	packedIP = socket.inet_aton(ip)
