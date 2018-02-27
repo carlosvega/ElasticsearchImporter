@@ -69,21 +69,18 @@ In the [example.cfg](https://github.com/carlosvega/ElasticsearchImporter/blob/ma
 ## Installation
 
 ```Bash
-#replace pypy with python if you don't want to use pypy.
 git clone git@github.com:carlosvega/ElasticsearchImporter.git ElasticsearchImporter
 cd ElasticsearchImporter
 pip install virtualenv
-virtualenv myenv -p `which pypy`
+virtualenv myenv -p `which python3`
 source myenv/bin/activate 
 sudo apt-get update
 sudo apt-get install build-essential libssl-dev libffi-dev python-dev
 sudo pip2 install --upgrade urllib3[secure] requests[security] pyopenssl ndg-httpsclient pyasn1 pip
 pip2 install -rU requirements.txt 
 #index your first 100K lines
-time yes '1509750000000;52.5720661, 52.5720661;192.168.1.1;PotatoFriend;This is a potato and it is your friend;20;201.1' | head -100000 | pv -l | pypy elasticImporter.py -c example.cfg
+time yes '1509750000000;52.5720661, 52.5720661;192.168.1.1;PotatoFriend;This is a potato and it is your friend;20;201.1' | head -100000 | pv -l | python3 elasticImporter.py -c example.cfg
 ```
-
-Replace pypy for python2 to use it with standard python.
 
 ## Performance
 
@@ -91,7 +88,7 @@ On a Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz with 32GB of RAM using Elasticsearc
 Executing a 10 Million lines test:
 
 ```Bash
-yes '1509750000000;52.5720661, 52.5720661;192.168.1.1;PotatoFriend;This is a potato and it is your friend;20;201.1' | head -10000000 | pv -l | time python elasticImporter.py -c example.cfg                                                             
+yes '1509750000000;52.5720661, 52.5720661;192.168.1.1;PotatoFriend;This is a potato and it is your friend;20;201.1' | head -10000000 | pv -l | time python3 elasticImporter.py -c example.cfg                                                             
 ```
 
 Python: 37871.615 lines/s
