@@ -32,7 +32,7 @@ Generic Elasticsearch Importer
 |  --raise_on_error      | Raise BulkIndexError containing errors (as .errors) from the execution of the last chunk when some occur. By default we DO NOT raise.|
 |  --raise_on_exception  | By default we DO NOT propagate exceptions from call to bulk and just report the items that failed as failed. Use this option to propagate exceptions.|
 |  --md5_id              | Uses the MD5 hash of the line as ID.|
-|  --md5_exclude [MD5_EXCLUDE [MD5_EXCLUDE ...]] List of column names to be excluded from the hash.|
+|  --md5_exclude [MD5_EXCLUDE [MD5_EXCLUDE ...]] | List of column names to be excluded from the hash.|
 |  --geo_precission GEO_PRECISSION | If set, geographical information will be added to the indexed documents. Possible values: country_level, multilevel, IP. If country_level is used in the geo_precission parameter, a column must be provided with either the country_code with 2 letters (ISO 3166-1 alpha-2) or the country_name in the format of the countries.csv file of the repository, for better results use country_code. If multilevel is set in the geo_precission option, then, a column or list of columns must be provided with either the country_code, region_name, city_name, or zip_code. If IP is set in the geo_precission option, then a column name containing IP addresses must be provided.|
 |  --geo_column_country_code GEO_COLUMN_COUNTRY_CODE | Column name containing country codes with 2 letters (ISO 3166-1 alpha-2). Used if geo_precission is set to either country_level or multilevel.|
 |  --geo_column_country_name GEO_COLUMN_COUNTRY_NAME | Column name containing country names. Used if geo_precission is set to either country_level.|
