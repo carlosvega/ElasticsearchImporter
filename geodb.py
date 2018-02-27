@@ -13,7 +13,7 @@ from shapely.geometry import MultiPoint
 from net_utils import *
 
 geolog = logging.getLogger(__name__)
-logging.basicConfig(format='%(asctime)s %(message)s', level=logging.INFO)
+logging.basicConfig(format="[ %(asctime)s %(levelname)s %(threadName)s ] " + "%(message)s", level=logging.INFO)
 
 class GeoDatabase_Base(object):
 	"""A base class with common methods.
