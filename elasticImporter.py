@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
-# encoding=utf8  
-import sys  
+# encoding=utf8
+import sys
 if sys.version_info < (3,0,0):
-	reload(sys)  
+	reload(sys)
 	sys.setdefaultencoding('utf8')
+import elasticsearch_dsl
+es_dsl_version = elasticsearch_dsl.__version__
 from six import iteritems
 from elasticsearch import Elasticsearch, helpers
 from elasticsearch_dsl import *
@@ -17,7 +19,13 @@ log = logging.getLogger(__name__)
 logging.basicConfig(format='%(asctime)s %(message)s', level=logging.INFO)
 args = None
 translate_cfg_property = None
-version = None
+es_version = None
+
+if es_dsl_version >= (6, 0, 0):
+	#no string object
+	#http://elasticsearch-dsl.readthedocs.io/en/latest/Changelog.html?highlight=String#id2
+	log.error('Please, use the versions provided in requirements.txt. Version >=6.0.0 of elasticsearch-dsl modules break backward compatibility.')
+	sys.exit()
 
 def parse_args():
 	parser = argparse.ArgumentParser(description='This program indexes files to elasticsearch.\n', formatter_class=RawTextHelpFormatter)
@@ -54,12 +62,12 @@ def parse_args():
 	parser.add_argument('--md5_id', dest='md5_id', default=False, action='store_true', help='Uses the MD5 hash of the line as ID.')
 	parser.add_argument('--md5_exclude', dest='md5_exclude', nargs = '*', required=False, default=[], help='List of column names to be excluded from the hash.')
 	#stuff to add geographical information from data fields
-	parser.add_argument('--geo_precission', dest='geo_precission', default=None, help='If set, geographical information will be added to the indexed documents. Possible values: country_level, multilevel, IP. If country_level is used in the geo_precission parameter, a column must be provided with either the country_code with 2 letters (ISO 3166-1 alpha-2) or the country_name in the format of the countries.csv file of the repository, for better results use country_code. If multilevel is set in the geo_precission option, then, a column or list of columns will be provided with either the country_code, country_name, region_name, city_name, or zip_code. If IP is set in the geo_precission option, then a column name containing IP addresses must be provided.')
+	parser.add_argument('--geo_precission', dest='geo_precission', default=None, help='If set, geographical information will be added to the indexed documents. Possible values: country_level, multilevel, IP. If country_level is used in the geo_precission parameter, a column must be provided with either the country_code with 2 letters (ISO 3166-1 alpha-2) or the country_name in the format of the countries.csv file of the repository, for better results use country_code. If multilevel is set in the geo_precission option, then, a column or list of columns must be provided with either the country_code, region_name, city_name, or zip_code. If IP is set in the geo_precission option, then a column name containing IP addresses must be provided.')
 
 	parser.add_argument('--geo_column_country_code', dest='geo_column_country_code', default=None, help='Column name containing country codes with 2 letters (ISO 3166-1 alpha-2). Used if geo_precission is set to either country_level or multilevel.')
-	parser.add_argument('--geo_column_country_name', dest='geo_column_country_name', default=None, help='Column name containing country names. Used if geo_precission is set to either country_level or multilevel.')
+	parser.add_argument('--geo_column_country_name', dest='geo_column_country_name', default=None, help='Column name containing country names. Used if geo_precission is set to either country_level.')
 	parser.add_argument('--geo_column_region_name', dest='geo_column_region_name', default=None, help='Column name containing region names. Used if geo_precission is set to multilevel.')
-	parser.add_argument('--geo_column_city_name', dest='geo_column_city_name', default=None, help='Column name containing city names. Used if geo_precission is set to multilevel.')
+	parser.add_argument('--geo_column_place_name', dest='geo_column_place_name', default=None, help='Column name containing place names. Used if geo_precission is set to multilevel.')
 	parser.add_argument('--geo_column_zip_code', dest='geo_column_zip_code', default=None, help='Column name containing zip codes. Used if geo_precission is set to multilevel.')
 	parser.add_argument('--geo_column_ip', dest='geo_column_ip', default=None, help='Column name containing IP addresses. Used if geo_precission is set to IP.')
 	parser.add_argument('--geo_int_ip', dest='geo_int_ip', default=False, help='Set if the provided IP addresses are integer numbers.')
@@ -67,7 +75,7 @@ def parse_args():
 	args = parser.parse_args()
 
 	args.geo_precission = args.geo_precission.lower() if args.geo_precission is not None else args.geo_precission
-	if args.geo_precission not in ['ip', 'multilevel', 'country_level']:
+	if args.geo_precission not in ['ip', 'multilevel', 'country_level', None]:
 		log.error("Please, provide a valid --geo_precission option {'ip', 'multilevel', 'country_level'}.")
 		sys.exit(-1)
 
@@ -82,8 +90,8 @@ def parse_args():
 			args.geo_fields['country_name'] = args.geo_column_country_name
 		if args.geo_column_region_name is not None:
 			args.geo_fields['region_name'] = args.geo_column_region_name
-		if args.geo_column_city_name is not None:
-			args.geo_fields['city_name'] = args.geo_column_city_name
+		if args.geo_column_place_name is not None:
+			args.geo_fields['place_name'] = args.geo_column_place_name
 		if args.geo_column_zip_code is not None:
 			args.geo_fields['zip_code'] = args.geo_column_zip_code
 	elif args.geo_precission == 'country_level':
@@ -104,37 +112,80 @@ def get_script_path():
 	return os.path.dirname(os.path.realpath(sys.argv[0]))
 
 #GEO LOCATION STUFF
-def get_geodata_field():
+def get_geodata_field(level):
 	"""Creates a geodata field for the DocType considering the following format.
-	 {
-	 'city_name': 'MONTERREY',
-	 'country_code': 'MX',
-	 'country_name': 'MEXICO',
-	 'location': {'lat': 25.66667, 'lon': -100.31667},
-	 'region_name': 'NUEVO LEON',
-	 'representative_point': {'lat': 21.210829999999998, 'lon': -100.21194},
-	 'zip_code': '64830'
-	}
+
+	Format for Country Level geolocalization:
+
+	 {'country_code': 'US',
+	  'country_name': 'UNITED STATES',
+ 	  'location': '37.09024,-95.712891',
+ 	  'representative_point': '37.09024,-95.712891'}
+
+	Format for Multilevel geolocalization:
+
+	{'accuracy': 4.0,
+	 'admin_code1': 'DC',
+	 'admin_code2': '001',
+	 'admin_code3': '',
+	 'admin_name1': 'DISTRICT OF COLUMBIA',
+	 'admin_name2': 'DISTRICT OF COLUMBIA',
+	 'admin_name3': '',
+	 'country_code': 'US',
+	 'country_name': None, // always None in Multilevel geolocalization
+	 'location': '38.9122,-77.0177',
+	 'place_name': 'WASHINGTON',
+	 'representative_point': '38.8959,-77.0211',
+	 'zip_code': '20001'}
+
+	Format for IP Level geolocalization:
+
+	{'country_code': 'US',
+	 'country_name': 'UNITED STATES',
+	 'location': '37.44188,-122.14302',
+	 'place_name': 'PALO ALTO',
+	 'region_name': 'CALIFORNIA',
+	 'representative_point': '37.57259,-92.932405',
+	 'zip_code': '94301'}
+
+	The three formats match in location, representative_point, country_code
+
 	:return: A geodata field.
 	"""
 	#
 	extra_geo_fields = {}
-	#
-	extra_geo_fields['geo_city_name'] = translate_cfg_property('keyword')
+
+	if level == 'country_level':
+		pass
+	if level == 'multilevel':
+		extra_geo_fields['geo_accuracy'] = translate_cfg_property('float')
+		extra_geo_fields['geo_admin_code2'] = translate_cfg_property('keyword')
+		extra_geo_fields['geo_admin_code3'] = translate_cfg_property('keyword')
+		extra_geo_fields['geo_admin_name1'] = translate_cfg_property('keyword')
+		extra_geo_fields['geo_admin_name2'] = translate_cfg_property('keyword')
+		extra_geo_fields['geo_admin_name3'] = translate_cfg_property('keyword')
+		extra_geo_fields['geo_place_name'] = translate_cfg_property('keyword')
+		extra_geo_fields['geo_zip_code'] = translate_cfg_property('keyword')
+	if level == 'ip':
+		extra_geo_fields['geo_place_name'] = translate_cfg_property('keyword')
+		extra_geo_fields['geo_region_name'] = translate_cfg_property('keyword')
+		extra_geo_fields['geo_zip_code'] = translate_cfg_property('keyword')
+
 	extra_geo_fields['geo_country_code'] = translate_cfg_property('keyword')
 	extra_geo_fields['geo_country_name'] = translate_cfg_property('keyword')
-	extra_geo_fields['geo_region_name'] = translate_cfg_property('keyword')
-	extra_geo_fields['geo_zip_code'] = translate_cfg_property('keyword')
-	#location
 	extra_geo_fields['geo_location'] = translate_cfg_property('geopoint')
 	extra_geo_fields['geo_representative_point'] = translate_cfg_property('geopoint')
+
 	return extra_geo_fields
 
 def load_geo_database(level):
+	path = get_script_path()
 	if level == 'country_level':
-		return CountryLevel_GeoDB('db0', '{}/db/countries.csv'.format(get_script_path()), '{}/db/geodb0.db'.format(get_script_path()), update=False)
-	if level == 'multilevel' or level == 'ip':
-		return ZIP_GeoIPDB('db9', '{}/db/IP2LOCATION-LITE-DB9.CSV.gz'.format(get_script_path()), '{}/db/geodb9.db'.format(get_script_path()), update=False)
+		return CountryLevel_GeoDB('db0', '{}/db/countries.csv'.format(path), '{}/db/geodb0.db'.format(path), update=False)
+	if level == 'multilevel':
+		return ZIPLevel_GeoDB('{}/db/multilevel.db'.format(path), '{}/db/create_zip_db.sql.gz'.format(path), update=False)
+	if level == 'ip':
+		return ZIP_GeoIPDB('db9', '{}/db/IP2LOCATION-LITE-DB9.CSV.gz'.format(path), '{}/db/geodb9.db'.format(path), update=False)
 	return None
 
 #END OF GEO LOCATION STUFF
@@ -175,14 +226,14 @@ def translate_cfg_property_std(v):
 	elif v == 'ip':
 		return Ip()
 
-def create_doc_class(cfg, doc_type, geo=False):
+def create_doc_class(cfg, doc_type, geo):
 	#create class
 	dicc = {}
 	for k, v in cfg['properties'].items():
 		dicc[k] = translate_cfg_property(v)
 
-	if geo:
-		extra_geo_fields = get_geodata_field()
+	if geo is not None:
+		extra_geo_fields = get_geodata_field(geo)
 		for key, value in iteritems(extra_geo_fields):
 			dicc[key] = value
 
@@ -220,7 +271,7 @@ def parse_property(str_value, t, args):
 		log.warn('TypeError processing value |{}| of type |{}| ignoring this field.'.format(str_value, t))
 		return None
 
-def input_generator(cfg, index, doc_type, args): 
+def input_generator(cfg, index, doc_type, args):
 	properties = cfg['properties']
 	fields = cfg['order_in_file']
 	n_fields = len(cfg['order_in_file'])
@@ -303,14 +354,14 @@ if __name__ == '__main__':
 	else:
 		es = Elasticsearch(args.node, timeout=args.timeout, port=args.port, http_auth=(args.user, args.password))
 	full_version = es.info()['version']['number']
-	version = int(full_version.split('.')[0])
+	es_version = int(full_version.split('.')[0])
 
-	if version == 1:
+	if es_version == 1:
 		log.error('Elasticsearch version 1.x is not supported.')
 
 	log.info('Using elasticsearch version {}'.format(full_version))
 
-	translate_cfg_property = translate_cfg_property_2x if version == 2 else translate_cfg_property_std
+	translate_cfg_property = translate_cfg_property_2x if es_version == 2 else translate_cfg_property_std
 
 	#load cfg file
 	cfg = json.load(open(args.cfg))
@@ -318,12 +369,12 @@ if __name__ == '__main__':
 	doc_type = str(cfg['meta']['type']) if args.type is None else args.type
 	#create class from the cfg
 	#this class is used to initialize the mapping
-	DocClass = create_doc_class(cfg, doc_type, geo=args.geo_precission is not None)
+	DocClass = create_doc_class(cfg, doc_type, args.geo_precission)
 	#connection to elasticsearch
 	if args.user is None:
 		connections.create_connection(hosts=[args.node], timeout=args.timeout, port=args.port) #connection for api
 	else:
-		connections.create_connection(hosts=[args.node], timeout=args.timeout, port=args.port, http_auth=(args.user, args.password)) #connection for api
+		connections.create_connection(hosts=[args is not None.node], timeout=args.timeout, port=args.port, http_auth=(args.user, args.password)) #connection for apgeoi
 	#initialize mapping
 	index_obj = Index(index, using=es)
 	if not index_obj.exists():
@@ -343,7 +394,7 @@ if __name__ == '__main__':
 		abs_ctr+=1
 		#STATS
 		if ok:
-			success+=1	
+			success+=1
 		else:
 			failed+=1
 			failed_items.append(abs_ctr)
