@@ -247,8 +247,24 @@ class ZIPLevel_GeoDB(GeoDatabase_Base):
 			types = ZIPLevel_GeoDB.types
 		if len(index_columns) == 0:
 			index_columns = ZIPLevel_GeoDB.indices
+		if not ZIPLevel_GeoDB.check_FTS5_support():
+			geolog.error('FTS5 extension not available in your sqlite3 installation. py-sqlite3 version: {}. sqlite3 version: {}. Please, recompile or reinstall sqlite3 modules with FTS5 support.'.format(sqlite3.version, sqlite3.sqlite_version))
+			sys.exit(1)
 		super(ZIPLevel_GeoDB, self).__init__(name, original_db_path, db_path, names=names, types=types, index_columns=index_columns, update=update)
 		geolog.debug('ZIPLevel_GeoDB loaded.')
+
+	@classmethod
+	def check_FTS5_support(cls):
+		con = sqlite3.connect(':memory:')
+		cur = con.cursor()
+		cur.execute('pragma compile_options;')
+		available_pragmas = cur.fetchall()
+		con.close()
+
+		if ('ENABLE_FTS5',) in available_pragmas:
+			return True
+		else:
+			return False
 
 	def _load_database(self, update):
 		if not (os.path.exists(self.db_path) and os.path.isfile(self.db_path)):
@@ -329,7 +345,7 @@ class ZIP_GeoIPDB(GeoDatabase_Base):
 	"""
 	names   = ["ip_from", "ip_to", "country_code", "country_name", "region_name", "place_name", "latitude", "longitude", "zip_code"]
 	types   = {'ip_from': int, 'ip_to': int, 'country_code': str, 'country_name': str, 'region_name': str, 'place_name': str, 'latitude': float, 'longitude': float, 'zip_code': str}
-	indices = ['country_code', 'country_name', 'place_name', 'zip_code']
+	indices = ['ip_to', 'ip_from']
 	def __init__(self, *args, **kwargs):
 		if 'index_columns' not in kwargs:
 			kwargs['index_columns'] = ZIP_GeoIPDB.indices
@@ -341,6 +357,7 @@ class ZIP_GeoIPDB(GeoDatabase_Base):
 			kwargs['compression'] = 'gzip'
 		super(ZIP_GeoIPDB, self).__init__(*args, **kwargs)
 		geolog.debug('ZIP_GeoIPDB DB9 loaded.')
+
 
 	def _get_geodata(self, column, value, multi_op='AND', str_ip=True):
 		"""Queries the database.
