@@ -4,6 +4,8 @@ import sys
 if sys.version_info < (3,0,0):
 	reload(sys)
 	sys.setdefaultencoding('utf8')
+else:
+	long = int
 import elasticsearch_dsl
 es_dsl_version = elasticsearch_dsl.__version__
 from six import iteritems
@@ -65,7 +67,7 @@ def parse_args():
 	parser.add_argument('--md5_exclude', dest='md5_exclude', nargs = '*', required=False, default=[], help='List of column names to be excluded from the hash.')
 
 	#stuff to add geographical information from data fields
-	parser.add_argument('--geo_precission', dest='geo_precission', default=None, help='If set, geographical information will be added to the indexed documents. Possible values: country_level, multilevel, IP. If country_level is used in the geo_precission parameter, a column must be provided with either the country_code with 2 letters (ISO 3166-1 alpha-2) or the country_name in the format of the countries.csv file of the repository, for better results use country_code. If multilevel is set in the geo_precission option, then, a column or list of columns must be provided with either the country_code, region_name, city_name, or zip_code. If IP is set in the geo_precission option, then a column name containing IP addresses must be provided.')
+	parser.add_argument('--geo_precission', dest='geo_precission', default=None, help='If set, geographical information will be added to the indexed documents. Possible values: country_level, multilevel, IP. If country_level is used in the geo_precission parameter, a column must be provided with either the country_code with 2 letters (ISO 3166-1 alpha-2) or the country_name in the format of the countries.csv file of the repository, for better results use country_code. If multilevel is set in the geo_precission option, then, a column or list of columns must be provided with either the country_code, region_name, place_name, or zip_code. If IP is set in the geo_precission option, then a column name containing IP addresses must be provided.')
 
 	parser.add_argument('--geo_column_country_code', dest='geo_column_country_code', default=None, help='Column name containing country codes with 2 letters (ISO 3166-1 alpha-2). Used if geo_precission is set to either country_level or multilevel.')
 	parser.add_argument('--geo_column_country_name', dest='geo_column_country_name', default=None, help='Column name containing country names. Used if geo_precission is set to either country_level.')
@@ -349,6 +351,9 @@ if __name__ == '__main__':
 	#load parameters
 	args = parse_args()
 
+	#load cfg file
+	cfg = json.load(open(args.cfg))
+
 	pid = os.getpid()
 	def signal_handler(signal, frame):
 			log.error('You pressed Ctrl+C! Aborting execution.')
@@ -369,6 +374,16 @@ if __name__ == '__main__':
 	for logger in loggers:
 		logger.setLevel(loglevel)
 
+
+	cfg_errors = False
+	for column in args.geo_fields.values():
+		if column not in cfg['order_in_file']:
+			log.error('Column |{}| not in the given cfg file {}.'.format(column, args.cfg))
+			cfg_errors = True
+	if cfg_errors:
+		sys.exit(1)
+
+
 	if args.user is None:
 		es = Elasticsearch(args.node, timeout=args.timeout, port=args.port)
 	else:
@@ -383,8 +398,6 @@ if __name__ == '__main__':
 
 	translate_cfg_property = translate_cfg_property_2x if es_version == 2 else translate_cfg_property_std
 
-	#load cfg file
-	cfg = json.load(open(args.cfg))
 	index = cfg['meta']['index'] if args.index is None else args.index
 	doc_type = str(cfg['meta']['type']) if args.type is None else args.type
 	#create class from the cfg
@@ -425,7 +438,7 @@ if __name__ == '__main__':
 			failed+=1
 			failed_items.append(abs_ctr)
 		#PROGRESS
-		if (success+failed)%10000 == 0 and not args.noprogress:
+		if (success+failed)%100000 == 0 and not args.noprogress:
 			log.info('Success: {0}, Failed: {1}'.format(success, failed))
 
 	log.info('Success: {0}, Failed: {1}'.format(success, failed))
