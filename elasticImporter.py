@@ -51,6 +51,9 @@ def parse_args():
 	parser.add_argument('--replicas', dest='replicas', default=0, help='Number of replicas for the index if it does not exist. Default: 0')
 	parser.add_argument('--shards', dest='shards', default=2, help='Number of shards for the index if it does not exist. Default: 2')
 	parser.add_argument('--refresh_interval', dest='refresh_interval', default='60s', help='Refresh interval for the index if it does not exist. Default: 60s')
+	parser.add_argument('--no_source', dest='no_source', default=False, action='store_true', help='If true, do not index _source field.')
+	parser.add_argument('--no_all', dest='no_all', default=False, action='store_true', help='If true, do not index _all field.')
+
 	#index sutff for elastic
 	parser.add_argument('--bulk', dest='bulk', required=False, default=2000, help='Elasticsearch bulk size parameter. Default: 2000')
 	parser.add_argument('--threads', dest='threads', required=False, default=5, help='Number of threads for the parallel bulk. Default: 5')
@@ -231,17 +234,23 @@ def translate_cfg_property_std(v):
 	elif v == 'ip':
 		return Ip()
 
-def create_doc_class(cfg, doc_type, geo):
+def create_doc_class(cfg, doc_type, args):
 	#create class
 	dicc = {}
 	for k, v in cfg['properties'].items():
 		dicc[k] = translate_cfg_property(v)
 
-	if geo is not None:
-		extra_geo_fields = get_geodata_field(geo)
+	if args.geo_precission is not None:
+		extra_geo_fields = get_geodata_field(args.geo_precission)
 		for key, value in iteritems(extra_geo_fields):
 			dicc[key] = value
 
+	if args.no_source:
+		dicc[doc_type] = {'_source' : {'enabled' : False}}
+
+	if args.no_all:
+		dicc[doc_type] = {'_all' : {'enabled' : False}}		
+		
 	DocClass = type(doc_type, (DocType,), dicc)
 	return DocClass
 
@@ -402,7 +411,7 @@ if __name__ == '__main__':
 	doc_type = str(cfg['meta']['type']) if args.type is None else args.type
 	#create class from the cfg
 	#this class is used to initialize the mapping
-	DocClass = create_doc_class(cfg, doc_type, args.geo_precission)
+	DocClass = create_doc_class(cfg, doc_type, args)
 	#connection to elasticsearch
 	if args.user is None:
 		connections.create_connection(hosts=[args.node], timeout=args.timeout, port=args.port) #connection for api
