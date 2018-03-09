@@ -1,11 +1,6 @@
 # -*- coding: utf-8 -*-
-# encoding=utf8
-import sys
-if sys.version_info < (3,0,0):
-	reload(sys)
-	sys.setdefaultencoding('utf8')
 import pandas as pd
-import sqlite3, argparse, os, logging, os.path, gzip
+import sqlite3, argparse, os, logging, os.path, gzip, sys
 import numpy as np
 from shapely.geometry import MultiPoint
 from argparse import RawTextHelpFormatter
@@ -292,6 +287,7 @@ class ZIPLevel_GeoDB(GeoDatabase_Base):
 				geolog.info('Database {} created.'.format(self.db_path))
 		self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
 		self.conn.row_factory = self._dict_factory
+		self.conn.text_factory = str
 		return self.conn
 
 	def _get_geodata(self, column, value, multi_op='AND'):
