@@ -53,10 +53,10 @@ def parse_args():
 	parser.add_argument('--no_all', dest='no_all', default=False, action='store_true', help='If true, do not index _all field.')
 
 	#index sutff for elastic
-	parser.add_argument('--bulk', dest='bulk', required=False, default=2000, help='Elasticsearch bulk size parameter. Default: 2000')
-	parser.add_argument('--threads', dest='threads', required=False, default=5, help='Number of threads for the parallel bulk. Default: 5')
-	parser.add_argument('--queue', dest='queue', required=False, default=5, help='Size of queue for the parallel bulk. Default: 6')
-	parser.add_argument('--timeout', dest='timeout', required=False, default=600, help='Connection timeout in seconds. Default: 600')
+	parser.add_argument('--bulk', dest='bulk', required=False, default=2000, type=int, help='Elasticsearch bulk size parameter. Default: 2000')
+	parser.add_argument('--threads', dest='threads', required=False, default=5, type=int, help='Number of threads for the parallel bulk. Default: 5')
+	parser.add_argument('--queue', dest='queue', required=False, default=6, type=int, help='Size of the task queue between the main thread (producing chunks to send) and the processing threads. Default: 6')
+	parser.add_argument('--timeout', dest='timeout', required=False, type=int, default=600, help='Connection timeout in seconds. Default: 600')
 	#internal stuff for the elastic API
 	parser.add_argument('--debug', dest='debug', default=False, action='store_true', help='If true log level is set to DEBUG.')
 	parser.add_argument('--no_progress', dest='noprogress', default=False, action='store_true', help='If true do not show progress.')
@@ -185,12 +185,18 @@ def get_geodata_field(level):
 	return extra_geo_fields
 
 def load_geo_database(level):
-	path = get_script_path()
 	if level == 'country_level':
+		path = get_script_path()
+		from geodb import CountryLevel_GeoDB
 		return CountryLevel_GeoDB('db0', '{}/db/countries.csv'.format(path), '{}/db/geodb0.db'.format(path), update=False)
-	if level == 'multilevel':
+	elif level == 'multilevel':
+		path = get_script_path()
+		from geodb import ZIPLevel_GeoDB
+		log.info('FTS5 Support: {}'.format(ZIPLevel_GeoDB.check_FTS5_support()))
 		return ZIPLevel_GeoDB('{}/db/multilevel.db'.format(path), '{}/db/create_zip_db.sql.gz'.format(path), update=False)
-	if level == 'ip':
+	elif level == 'ip':
+		path = get_script_path()
+		from geodb import ZIP_GeoIPDB
 		return ZIP_GeoIPDB('db9', '{}/db/IP2LOCATION-LITE-DB9.CSV.gz'.format(path), '{}/db/geodb9.db'.format(path), update=False)
 	return None
 
@@ -248,7 +254,7 @@ def create_doc_class(cfg, doc_type, args):
 
 	if args.no_all:
 		dicc[doc_type] = {'_all' : {'enabled' : False}}		
-		
+
 	DocClass = type(doc_type, (DocType,), dicc)
 	return DocClass
 
@@ -393,8 +399,8 @@ if __name__ == '__main__':
 			log.error('Column |{}| not in the given cfg file {}.'.format(column, args.cfg))
 			cfg_errors = True
 	if cfg_errors:
+		log.error('There were some errors in your cfg file.')
 		sys.exit(1)
-
 
 	if args.user is None:
 		es = Elasticsearch(args.node, timeout=args.timeout, port=args.port)
