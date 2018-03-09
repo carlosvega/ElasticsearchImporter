@@ -17,12 +17,12 @@ class Test_geodb(object):
 
 	#MULTI LEVEL
 	@pytest.mark.skipif(ZIPLevel_GeoDB.check_FTS5_support() == False, reason='FTS5 extension not available in your sqlite3 installation. py-sqlite3 version: {}. sqlite3 version: {}. Please, recompile or reinstall sqlite3 modules with FTS5 support.'.format(sqlite3.version, sqlite3.sqlite_version))
-	def test_multilevel_db(self):
+	def test_multilevel_db(self, sessiondir, script_path):
 		db = sessiondir.join('db')
 		if not db.exists():
 			db.mkdir()
 		path = str(sessiondir)
-		multilevel_db = ZIPLevel_GeoDB('{}/db/multilevel.db'.format(path), '{}/db/create_zip_db.sql.gz'.format(path), update=False)
+		multilevel_db = ZIPLevel_GeoDB('{}/db/multilevel.db'.format(path), '{}/db/create_zip_db.sql.gz'.format(script_path), update=False)
 		#TO DO
 		pass
 
