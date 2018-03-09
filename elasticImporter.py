@@ -1,10 +1,7 @@
 # -*- coding: utf-8 -*-
 # encoding=utf8
 import sys
-if sys.version_info < (3,0,0):
-	reload(sys)
-	sys.setdefaultencoding('utf8')
-else:
+if sys.version_info >= (3,0,0):
 	long = int
 import elasticsearch_dsl
 es_dsl_version = elasticsearch_dsl.__version__
@@ -47,6 +44,7 @@ def parse_args():
 	parser.add_argument('--dates_in_seconds', dest='dates_in_seconds', default=False, action='store_true', help='If true, assume dates are provided in seconds.')
 	parser.add_argument('--refresh', dest='refresh', default=False, action='store_true', help='Refresh the index when finished.')
 	parser.add_argument('--delete', dest='delete', default=False, action='store_true', help='Delete the index before process.')
+	parser.add_argument('--utf8', dest='utf8', default=False, action='store_true', help='Change the default encoding to utf8. In python2 performance is drastically affected. No effect in python3.')
 	#meta stuff to consider when creating indices
 	parser.add_argument('--replicas', dest='replicas', default=0, help='Number of replicas for the index if it does not exist. Default: 0')
 	parser.add_argument('--shards', dest='shards', default=2, help='Number of shards for the index if it does not exist. Default: 2')
@@ -359,6 +357,11 @@ def input_generator(cfg, index, doc_type, args):
 if __name__ == '__main__':
 	#load parameters
 	args = parse_args()
+
+	if args.utf8:
+		if sys.version_info < (3,0,0):
+			reload(sys)
+			sys.setdefaultencoding('utf8')
 
 	#load cfg file
 	cfg = json.load(open(args.cfg))
