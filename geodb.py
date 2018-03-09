@@ -7,9 +7,6 @@ from argparse import RawTextHelpFormatter
 from shapely.geometry import MultiPoint
 from net_utils import *
 
-geolog = logging.getLogger(__name__)
-logging.basicConfig(format="[ %(asctime)s %(levelname)s %(threadName)s ] " + "%(message)s", level=logging.INFO)
-
 class GeoDatabase_Base(object):
 	"""A base class with common methods.
 	Child classes should implement _get_geodata
@@ -67,7 +64,7 @@ class GeoDatabase_Base(object):
 		cursor = self.conn.cursor()
 		cursor.execute("SELECT name FROM sqlite_master WHERE type == 'index'")
 		self.indices = [index[0] for index in cursor.fetchall()]
-		geolog.debug('INDICES: {}'.format(self.indices))
+		logging.debug('INDICES: {}'.format(self.indices))
 		cursor.close()
 		return self.indices
 
@@ -79,9 +76,9 @@ class GeoDatabase_Base(object):
 		cursor = self.conn.cursor()
 		for column in columns:
 			if column in self.indices:
-				geolog.info('The index {} already exists.'.format(column))
+				logging.info('The index {} already exists.'.format(column))
 			else:
-				geolog.info('Creating Index {} for column {}'.format(column, column))
+				logging.info('Creating Index {} for column {}'.format(column, column))
 				cursor.execute('CREATE INDEX {} ON {}({})'.format(column, self.name, column))
 		cursor.close()
 
@@ -94,12 +91,12 @@ class GeoDatabase_Base(object):
 			update = True
 
 		if update:
-			geolog.warning('Updating database {} from file {}.'.format(self.db_path, self.original_db_path))
+			logging.warning('Updating database {} from file {}.'.format(self.db_path, self.original_db_path))
 			try:
 				os.remove(self.db_path)
-				geolog.warning('Database {} removed.'.format(self.db_path))
+				logging.warning('Database {} removed.'.format(self.db_path))
 			except OSError:
-				geolog.warning('Database {} does not exist.'.format(self.db_path))
+				logging.warning('Database {} does not exist.'.format(self.db_path))
 				pass
 			#LOADING DATABASE FROM FILE
 			self.df = pd.read_csv(self.original_db_path, sep=self.separator, names=self.names, dtype=self.types, compression=self.compression, keep_default_na=False, na_values=['-1.#IND', '1.#QNAN', '1.#IND', '-1.#QNAN', '#N/A N/A', '#N/A', 'N/A', 'n/a', '#NA', 'NULL', 'null', 'NaN', '-NaN', 'nan', '-nan', ''], encoding='utf-8')
@@ -108,7 +105,7 @@ class GeoDatabase_Base(object):
 					self.df[column] = self.df[column].str.upper()
 			self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
 			self.df.to_sql(self.name, self.conn, if_exists='replace')
-			geolog.info('Database {} created.'.format(self.db_path))
+			logging.info('Database {} created.'.format(self.db_path))
 		else:
 			self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
 		self._get_indices()
@@ -188,7 +185,7 @@ class CountryLevel_GeoDB(GeoDatabase_Base):
 		if 'types' not in kwargs:
 			kwargs['types'] = CountryLevel_GeoDB.types
 		super(CountryLevel_GeoDB, self).__init__(*args, **kwargs)
-		geolog.debug('CountryLevel_GeoDB DB0 loaded.')
+		logging.debug('CountryLevel_GeoDB DB0 loaded.')
 
 	def _get_geodata(self, column, value, multi_op='AND'):
 		"""Queries the database.
@@ -243,10 +240,10 @@ class ZIPLevel_GeoDB(GeoDatabase_Base):
 		if len(index_columns) == 0:
 			index_columns = ZIPLevel_GeoDB.indices
 		if not ZIPLevel_GeoDB.check_FTS5_support():
-			geolog.error('FTS5 extension not available in your sqlite3 installation. py-sqlite3 version: {}. sqlite3 version: {}. Please, recompile or reinstall sqlite3 modules with FTS5 support.'.format(sqlite3.version, sqlite3.sqlite_version))
+			logging.error('FTS5 extension not available in your sqlite3 installation. py-sqlite3 version: {}. sqlite3 version: {}. Please, recompile or reinstall sqlite3 modules with FTS5 support.'.format(sqlite3.version, sqlite3.sqlite_version))
 			sys.exit(1)
 		super(ZIPLevel_GeoDB, self).__init__(name, original_db_path, db_path, names=names, types=types, index_columns=index_columns, update=update)
-		geolog.debug('ZIPLevel_GeoDB loaded.')
+		logging.debug('ZIPLevel_GeoDB loaded.')
 
 	@classmethod
 	def check_FTS5_support(cls):
@@ -266,12 +263,12 @@ class ZIPLevel_GeoDB(GeoDatabase_Base):
 			update = True
 
 		if update:
-			geolog.warning('Updating database {} from file {}.'.format(self.db_path, self.original_db_path))
+			logging.warning('Updating database {} from file {}.'.format(self.db_path, self.original_db_path))
 			try:
 				os.remove(self.db_path)
-				geolog.warning('Database {} removed.'.format(self.db_path))
+				logging.warning('Database {} removed.'.format(self.db_path))
 			except OSError:
-				geolog.warning('Database {} does not exist. Creating database...'.format(self.db_path))
+				logging.warning('Database {} does not exist. Creating database...'.format(self.db_path))
 				pass
 			#POPULATING DATABASE FROM FILE
 			self.conn = sqlite3.connect(self.db_path)
@@ -284,7 +281,7 @@ class ZIPLevel_GeoDB(GeoDatabase_Base):
 				self.cursor.close()
 				self.conn.close()
 				del query
-				geolog.info('Database {} created.'.format(self.db_path))
+				logging.info('Database {} created.'.format(self.db_path))
 		self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
 		self.conn.row_factory = self._dict_factory
 		self.conn.text_factory = str
@@ -352,7 +349,7 @@ class ZIP_GeoIPDB(GeoDatabase_Base):
 		if 'compression' not in kwargs:
 			kwargs['compression'] = 'gzip'
 		super(ZIP_GeoIPDB, self).__init__(*args, **kwargs)
-		geolog.debug('ZIP_GeoIPDB DB9 loaded.')
+		logging.debug('ZIP_GeoIPDB DB9 loaded.')
 
 
 	def _get_geodata(self, column, value, multi_op='AND', str_ip=True):
