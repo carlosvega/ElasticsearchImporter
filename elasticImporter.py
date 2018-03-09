@@ -9,10 +9,10 @@ from six import iteritems
 from elasticsearch import Elasticsearch, helpers
 from elasticsearch_dsl import *
 from elasticsearch_dsl.connections import connections
-import fileinput, logging, argparse, gc, codecs, json, math, hashlib, signal, os, traceback
+import fileinput, logging, argparse, gc, codecs, json, math, hashlib, signal, os, traceback, time
 from argparse import RawTextHelpFormatter
 from datetime import datetime
-from geodb import *
+from threading import Thread
 
 log = logging.getLogger(__name__)
 logging.basicConfig(format="[ %(asctime)s %(levelname)s %(threadName)s ] " + "%(message)s", level=logging.INFO)
@@ -45,13 +45,14 @@ def parse_args():
 	parser.add_argument('--refresh', dest='refresh', default=False, action='store_true', help='Refresh the index when finished.')
 	parser.add_argument('--delete', dest='delete', default=False, action='store_true', help='Delete the index before process.')
 	parser.add_argument('--utf8', dest='utf8', default=False, action='store_true', help='Change the default encoding to utf8. In python2 performance is drastically affected. No effect in python3.')
+	parser.add_argument('--typed_iterator', dest='typed_iterator', default=False, action='store_true', help='If true, use a typed iterator that checks the value types and parses them. Reduces performance.')
 	#meta stuff to consider when creating indices
 	parser.add_argument('--replicas', dest='replicas', default=0, help='Number of replicas for the index if it does not exist. Default: 0')
 	parser.add_argument('--shards', dest='shards', default=2, help='Number of shards for the index if it does not exist. Default: 2')
 	parser.add_argument('--refresh_interval', dest='refresh_interval', default='60s', help='Refresh interval for the index if it does not exist. Default: 60s')
 	parser.add_argument('--no_source', dest='no_source', default=False, action='store_true', help='If true, do not index _source field.')
 	parser.add_argument('--no_all', dest='no_all', default=False, action='store_true', help='If true, do not index _all field.')
-
+	parser.add_argument('--deflate_compression', dest='deflate_compression', default=False, action='store_true', help='Store compression level in Lucene indices. Elasticsearch default is usually LZ4. This option enables best_compression using DEFLATE compression. More information: https://www.elastic.co/blog/store-compression-in-lucene-and-elasticsearch')
 	#index sutff for elastic
 	parser.add_argument('--bulk', dest='bulk', required=False, default=2000, type=int, help='Elasticsearch bulk size parameter. Default: 2000')
 	parser.add_argument('--threads', dest='threads', required=False, default=5, type=int, help='Number of threads for the parallel bulk. Default: 5')
@@ -292,76 +293,105 @@ def parse_property(str_value, t, args):
 		log.warning('TypeError processing value |{}| of type |{}| ignoring this field.'.format(str_value, t))
 		return None
 
-def input_generator(cfg, index, doc_type, args):
-	properties = cfg['properties']
-	fields = cfg['order_in_file']
-	n_fields = len(cfg['order_in_file'])
-	try:
-		if args.input != '-':
-			f = codecs.open(args.input, buffering=1, encoding='utf-8', errors='ignore')
-		else:
-			f = sys.stdin
-	except IOError as e:
-		log.error('Error with the input file |{}|, Details: {}.'.format(args.input, sys.exc_info()[0]))
-		return
+def geo_append(dicc, args):
+	if args.geo_precission == 'ip':
+		geo_value = dicc.get(args.geo_column_ip, None)
+		geo_data = args.geodb.get_geodata('ip', geo_value, str_ip=(not args.geo_int_ip))
+	else:
+		geo_columns = []
+		geo_values = []
+		for db_column, text_column in iteritems(args.geo_fields):
+			geo_value = dicc.get(text_column, None)
+			if geo_value is not None:
+				geo_columns.append(db_column)
+				geo_values.append(geo_value.upper())
+		geo_data = args.geodb.get_geodata(geo_columns, geo_values)
+	#end if
+	if geo_data is not None:
+		for gkey, gvalue in iteritems(geo_data):
+			dicc['geo_'+gkey] = gvalue
 
+	return dicc
+
+def md5_calc(dicc, fields, args):
+	md5_dicc = {}
+	for idx, field in enumerate(fields):
+		if field not in args.md5_exclude:
+			md5_dicc[field] = dicc[field]
+	return hashlib.md5(json.dumps(md5_dicc)).hexdigest()
+
+def typed_iterator(cfg, index, doc_type, args, f):
 	ctr = 0
-
-	try:
-
-		for line in f:
-			try:
-				if ctr == 0 and args.skip_first_line:
-					continue
-				ctr+=1
-				sline = line.rstrip().split(args.separator)
-				dicc = {fields[i]: parse_property(value, properties[fields[i]], args) for i, value in enumerate(sline)}
-
-				if args.geo_precission is not None:
-					if args.geo_precission == 'ip':
-						geo_value = dicc.get(args.geo_column_ip, None)
-						geo_data = args.geodb.get_geodata('ip', geo_value, str_ip=(not args.geo_int_ip))
-					else:
-						geo_columns = []
-						geo_values = []
-						for db_column, text_column in iteritems(args.geo_fields):
-							geo_value = dicc.get(text_column, None)
-							if geo_value is not None:
-								geo_columns.append(db_column)
-								geo_values.append(geo_value.upper())
-						geo_data = args.geodb.get_geodata(geo_columns, geo_values)
-					if geo_data is not None:
-						for gkey, gvalue in iteritems(geo_data):
-							dicc['geo_'+gkey] = gvalue
-
-				#dicc = {k : dicc[k] for k in dicc if dicc[k] is not None} #remove nones
-				a = {
-					'_source' : dicc,
-					'_index'  : index,
-					'_type'   : doc_type
-				}
-
-				if args.md5_id:
-					md5_dicc = {}
-					for idx, field in enumerate(fields):
-						if field not in args.md5_exclude:
-							md5_dicc[field] = dicc[field]
-					a['_id'] = hashlib.md5(json.dumps(md5_dicc)).hexdigest()
-				yield a
-
-			except ValueError as e:
-				log.warning('Error processing line |{}| ({}). Ignoring line.'.format(line, ctr))
+	for line in f:
+		try:
+			if ctr == 0 and args.skip_first_line:
 				continue
-			except Exception as e:
-				log.warning('Error processing line |{}| ({}). Ignoring line. Details {}'.format(line, ctr, sys.exc_info()[0]))
-				traceback.print_exc(file=sys.stderr)
-				continue
-	except UnicodeDecodeError as e:
-		log.warning('UnicodeDecodeError processing the line after |{}| ({})'.format(line, ctr, sys.exc_info()[0]))
-		traceback.print_exc(file=sys.stderr)
-		return
+			ctr+=1
+			sline = line.rstrip().split(args.separator)
+			dicc = {cfg['order_in_file'][i]: parse_property(value, cfg['properties'][cfg['order_in_file'][i]], args) for i, value in enumerate(sline)}
+			if args.geo_precission is not None:
+				dicc = geo_append(dicc, args)
+				
+			a = {'_source' : dicc, '_index'  : index, '_type'   : doc_type}
+
+			if args.md5_id:
+				a['_id'] = md5_calc(dicc, cfg['order_in_file'], args)
+
+			yield a
+		except ValueError as e:
+			log.warning('Error processing line |{}| ({}). Ignoring line.'.format(line, ctr))
+			continue
+		except Exception as e:
+			log.warning('Error processing line |{}| ({}). Ignoring line. Details {}'.format(line, ctr, sys.exc_info()[0]))
+			traceback.print_exc(file=sys.stderr)
+			continue
+
+def input_generator(cfg, index, doc_type, args, f):
+	ctr = 0
+	for line in f:
+		if ctr == 0 and args.skip_first_line:
+			continue
+		ctr+=1
+		sline = line.rstrip().split(args.separator)
+		dicc = {cfg['order_in_file'][i]: value for i, value in enumerate(sline)}
+		#geo_stuff
+		if args.geo_precission is not None:
+			dicc = geo_append(dicc, args)
+			
+		a = {'_source' : dicc, '_index'  : index, '_type'   : doc_type}
+
+		if args.md5_id:
+			a['_id'] = md5_calc(dicc, cfg['order_in_file'], args)
+
+		a['_source'] = json.dumps(a['_source'])
+
+		yield a
+
+def dummy_iterator(n=100000):
+	element = {'_source': {u'timestamp': '1509750000000', u'geo': '52.5720661, 52.5720661', u'ip': '192.168.1.1', u'name': 'PotatoFriend', u'description': 'This is a potato and it is your friend', u'age': '20', u'size': '201.1'}, '_index': 'patata', '_type': 'my_potato'}
+	j_element = {'_source': json.dumps({u'timestamp': '1509750000000', u'geo': '52.5720661, 52.5720661', u'ip': '192.168.1.1', u'name': 'PotatoFriend', u'description': 'This is a potato and it is your friend', u'age': '20', u'size': '201.1'}), '_index': 'patata', '_type': 'my_potato'}
+	for i in xrange(n):
+		yield j_element
+
+def progress_t(threadname):
+	global start_indexing, index_success, index_failed, index_relative_ctr
+	prev_value = None
+	while True:
+		time.sleep(0.01)
+		temp_abs_ctr = index_success+index_failed
+		if index_relative_ctr >= 500000 and prev_value != temp_abs_ctr:
+			index_relative_ctr = 0
+			prev_value = temp_abs_ctr
+			lap_elapsed = time.time() - start_indexing
+			lap_speed = temp_abs_ctr/float(lap_elapsed)
+			log.info('Success: {}, Failed: {}. Elapsed: {:.4f} (sec.). Speed: {:.4f} (reg/s)'.format(index_success, index_failed, lap_elapsed, lap_speed))
+			gc.collect()
 
 if __name__ == '__main__':
+	#GLOBAL VARIABLES FOR progress_t
+	index_failed = -1; index_success = -1; start_indexing=0; index_relative_ctr=0
+	#END OF GLOBAL VARIABLES
+
 	#load parameters
 	args = parse_args()
 
@@ -441,29 +471,73 @@ if __name__ == '__main__':
 			number_of_shards=args.shards,
 			refresh_interval=args.refresh_interval
 		)
+		if args.deflate_compression:
+			log.warn('Using deflate compression for index {}.'.format(index))
+			index_obj.__dict__['_settings']['index.codec']='best_compression'
 		index_obj.save()
+	
 	DocClass.init(index=index, using=es)
+	
 	#create the file iterator
-	documents = input_generator(cfg, index, doc_type, args)
+	try:
+		if args.input != '-':
+			f = codecs.open(args.input, buffering=1, encoding='utf-8', errors='ignore')
+		else:
+			f = sys.stdin
+	except IOError as e:
+		log.error('Error with the input file |{}|, Details: {}.'.format(args.input, sys.exc_info()[0]))
+		sys.exit()
+
+	if args.typed_iterator:
+		log.info('Using typed_iterator. Performance might be affected.')
+		documents = typed_iterator(cfg, index, doc_type, args, f)
+	else:
+		documents = input_generator(cfg, index, doc_type, args, f)
+
+	if args.test_processing_speed:
+		start = time.time()
+		test_abs_ctr = 0
+		for d in documents:
+			test_abs_ctr+=1
+			print(d)
+		end = time.time()
+		elapsed = end - start
+		speed = test_abs_ctr/float(elapsed)
+		log.info('Success: {} Elapsed: {:.4f} (sec.). Speed: {:.4f} (reg/s)'.format(test_abs_ctr, elapsed, speed))
+		sys.exit()
+
+	start_indexing = time.time()
 	ret = helpers.parallel_bulk(es, documents, raise_on_exception=args.raise_on_exception, thread_count=args.threads, queue_size=args.queue, chunk_size=args.bulk, raise_on_error=args.raise_on_error)
 	failed_items = []
-	failed = 0; success = 0; abs_ctr=0
+	
+	if not args.noprogress:
+		progress_thread = Thread( target=progress_t, args=("ProgressT", ) )
+		progress_thread.start()
+	index_failed = 0; index_success = 0; abs_ctr=0; index_relative_ctr=0
 	for ok, item in ret:
 		abs_ctr+=1
+		index_relative_ctr+=1
 		#STATS
 		if ok:
-			success+=1
+			index_success+=1
 		else:
-			failed+=1
+			index_failed+=1
 			failed_items.append(abs_ctr)
-		#PROGRESS
-		if (success+failed)%100000 == 0 and not args.noprogress:
-			log.info('Success: {0}, Failed: {1}'.format(success, failed))
+			#better here than in progress_t because less executions are made
+			if len(failed_items) > 10000:
+				log.error('More than 10K errors, clearing error list.')
+				log.error('There were some errors during the process: Success: {0}, Failed: {1}'.format(index_success, index_failed))
+				log.error('These were the errors in lines: {}'.format(failed_items))
+				failed_items = []
+	if not args.noprogress:
+		progress_thread.join()
+	end = time.time() 
+	elapsed = end - start_indexing
+	speed = abs_ctr/float(elapsed)
+	log.info('Success: {}, Failed: {}. Elapsed: {:.4f} (sec.). Speed: {:.4f} (reg/s)'.format(index_success, index_failed, elapsed, speed))
 
-	log.info('Success: {0}, Failed: {1}'.format(success, failed))
-
-	if failed > 0:
-		log.error('There were some errors during the process: Success: {0}, Failed: {1}'.format(success, failed))
+	if index_failed > 0:
+		log.error('There were some errors during the process: Success: {0}, Failed: {1}'.format(index_success, index_failed))
 		log.error('These were the errors in lines: {}'.format(failed_items))
 
 	if args.refresh:
