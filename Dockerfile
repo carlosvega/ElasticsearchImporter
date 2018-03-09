@@ -6,7 +6,7 @@ RUN DEBIAN_FRONTEND=noninteractive DEBCONF_NONINTERACTIVE_SEEN=true dpkg-reconfi
 RUN echo "Europe/Madrid" > /etc/timezone
 RUN dpkg-reconfigure -f noninteractive tzdata
 RUN apt-get update -y
-RUN apt-get install -y git build-essential
+RUN apt-get install -y git build-essential sudo
 RUN git clone https://github.com/carlosvega/ElasticsearchImporter.git ElasticsearchImporter
 WORKDIR ElasticsearchImporter
 RUN bash ./install.bash
