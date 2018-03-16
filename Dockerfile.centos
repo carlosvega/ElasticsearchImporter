@@ -1,0 +1,9 @@
+FROM centos:7
+MAINTAINER Carlos Vega <carlos.vega@naudit.es>
+RUN yum update -y
+RUN yum groupinstall -y 'Development Tools'
+RUN yum install -y sudo wget which git python-pip python-virtualenv sqlite-devel tcl tcl-devel epel-release deltarpm
+RUN yum update -y
+RUN git clone https://github.com/carlosvega/ElasticsearchImporter.git ElasticsearchImporter
+WORKDIR ElasticsearchImporter
+RUN bash ./install.bash
