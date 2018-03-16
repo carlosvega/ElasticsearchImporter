@@ -55,7 +55,8 @@ elif yum --version &> /dev/null; then
 	pypy -m ensurepip
 	echo "[ - Installing repo ]"
 	wget https://bitbucket.org/squeaky/portable-pypy/downloads/pypy-5.10.0-linux_x86_64-portable.tar.bz2 -O pypy.tar.bz2 &> /dev/null
-	tar jxf pypy.tar.bz2 && rm -f pypy.tar.bz2
+	mkdir pypy
+	tar jxf pypy.tar.bz2 -C pypy --strip-components=1 && rm -f pypy.tar.bz2
 	echo "[ - Downloaded pypy version $(./pypy/bin/pypy --version) ]"
 	virtualenv .envpypy --python="$(pwd)/pypy/bin/pypy"
 	source .envpypy/bin/activate
