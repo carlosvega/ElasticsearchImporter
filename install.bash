@@ -35,7 +35,7 @@ if command -v apt-get &> /dev/null ; then
 	py.test
 	deactivate
 	echo "[ - Remember to enable the virtualenv with 'source .envpypy/bin/activate' ]"
-elif command -v yum &> /dev/null; then
+elif yum --version &> /dev/null; then
 	echo "[ - RHEL/CentOS based system detected ]"
 	yum update -y
 	yum groupinstall -y 'Development Tools'
