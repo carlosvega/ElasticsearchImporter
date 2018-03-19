@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 import pandas as pd
-import sqlite3, argparse, os, logging, os.path, gzip, sys
+import sqlite3, argparse, os, logging, os.path, gzip, sys, gc
 import numpy as np
 from shapely.geometry import MultiPoint
 from argparse import RawTextHelpFormatter
 from shapely.geometry import MultiPoint
 from net_utils import *
+from debug_utils import log_rss_memory_usage
 
 class GeoDatabase_Base(object):
 	"""A base class with common methods.
@@ -33,11 +34,11 @@ class GeoDatabase_Base(object):
 		self.types = types
 		self.separator = separator
 		self.conn = None
-		self.df = None
 		self.compression = compression
 		self.indices = []
 		self.index_columns = index_columns
-		self._load_database(update)
+		self.update = update
+		self._load_database()
 		self.cursor = self.conn.cursor()
 		self._results_cache = {}
 
@@ -82,15 +83,16 @@ class GeoDatabase_Base(object):
 				cursor.execute('CREATE INDEX {} ON {}({})'.format(column, self.name, column))
 		cursor.close()
 
-	def _load_database(self, update):
+	def _load_database(self):
 		"""Loads the database. If Update is true, populates the database with the self.original_db_path.
 		:param update: If True, removes the previous database file and regenerates the database. Otherwise just loads the database.
 		:return: SQL connection to sqlite3.
 		"""
-		if not (os.path.exists(self.db_path) and os.path.isfile(self.db_path)):
-			update = True
 
-		if update:
+		if not (os.path.exists(self.db_path) and os.path.isfile(self.db_path)):
+			self.update = True
+
+		if self.update:
 			logging.warning('Updating database {} from file {}.'.format(self.db_path, self.original_db_path))
 			try:
 				os.remove(self.db_path)
@@ -99,18 +101,24 @@ class GeoDatabase_Base(object):
 				logging.warning('Database {} does not exist.'.format(self.db_path))
 				pass
 			#LOADING DATABASE FROM FILE
-			self.df = pd.read_csv(self.original_db_path, sep=self.separator, names=self.names, dtype=self.types, compression=self.compression, keep_default_na=False, na_values=['-1.#IND', '1.#QNAN', '1.#IND', '-1.#QNAN', '#N/A N/A', '#N/A', 'N/A', 'n/a', '#NA', 'NULL', 'null', 'NaN', '-NaN', 'nan', '-nan', ''], encoding='utf-8')
-			for column, t in self.df.dtypes.iteritems():
+			log_rss_memory_usage('Before reading csv database.')
+			df = pd.read_csv(self.original_db_path, sep=self.separator, names=self.names, dtype=self.types, compression=self.compression, keep_default_na=False, na_values=['-1.#IND', '1.#QNAN', '1.#IND', '-1.#QNAN', '#N/A N/A', '#N/A', 'N/A', 'n/a', '#NA', 'NULL', 'null', 'NaN', '-NaN', 'nan', '-nan', ''], encoding='utf-8')
+			log_rss_memory_usage('After reading csv database.')
+			for column, t in df.dtypes.iteritems():
 				if t == np.dtype('O'):
-					self.df[column] = self.df[column].str.upper()
+					df[column] = df[column].str.upper()
 			self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
-			self.df.to_sql(self.name, self.conn, if_exists='replace')
+			df.to_sql(self.name, self.conn, if_exists='replace')
+			del df
+			gc.collect()
+			log_rss_memory_usage('After creating sql database.')
 			logging.info('Database {} created.'.format(self.db_path))
 		else:
 			self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
 		self._get_indices()
 		self._create_indices(self.index_columns)
 		self.conn.row_factory = self._dict_factory
+		log_rss_memory_usage('Finished _load_database function.')
 		return self.conn
 
 	def get_geodata(self, *args, **kwargs):
@@ -258,11 +266,11 @@ class ZIPLevel_GeoDB(GeoDatabase_Base):
 		else:
 			return False
 
-	def _load_database(self, update):
+	def _load_database(self):
 		if not (os.path.exists(self.db_path) and os.path.isfile(self.db_path)):
-			update = True
+			self.update = True
 
-		if update:
+		if self.update:
 			logging.warning('Updating database {} from file {}.'.format(self.db_path, self.original_db_path))
 			try:
 				os.remove(self.db_path)
@@ -274,6 +282,7 @@ class ZIPLevel_GeoDB(GeoDatabase_Base):
 			self.conn = sqlite3.connect(self.db_path)
 			self.cursor = self.conn.cursor()
 			self.cursor.execute('CREATE VIRTUAL TABLE geoinfo USING FTS5(country_code,zip_code,place_name,admin_name1,admin_code1,admin_name2,admin_code2,admin_name3,admin_code3,latitude,longitude,accuracy);')
+			log_rss_memory_usage('Before populating FTS5 database.')
 			with gzip.open(self.original_db_path, 'rt') as odb:
 				query = odb.read()
 				self.cursor.execute(query)
@@ -281,7 +290,9 @@ class ZIPLevel_GeoDB(GeoDatabase_Base):
 				self.cursor.close()
 				self.conn.close()
 				del query
+				gc.collect()
 				logging.info('Database {} created.'.format(self.db_path))
+			log_rss_memory_usage('After populating FTS5 database.')
 		self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
 		self.conn.row_factory = self._dict_factory
 		self.conn.text_factory = str
