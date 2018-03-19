@@ -47,7 +47,7 @@ def sessiondir(request):
 def country_level_db(sessiondir, script_path):
 	db = sessiondir.join('db')
 	if not db.exists():
-		db.mkdir() 
+		db.mkdir()
 	path = str(sessiondir)
 	return CountryLevel_GeoDB('db0', '{}/db/countries.csv'.format(script_path), '{}/db/geodb0.db'.format(path), update=False)
 
