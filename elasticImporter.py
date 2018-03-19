@@ -13,6 +13,7 @@ import fileinput, logging, argparse, gc, codecs, json, math, hashlib, signal, os
 from argparse import RawTextHelpFormatter
 from datetime import datetime
 from threading import Thread
+from debug_utils import log_rss_memory_usage
 
 log = logging.getLogger(__name__)
 logging.basicConfig(format="[ %(asctime)s %(levelname)s %(threadName)s ] " + "%(message)s", level=logging.INFO)
@@ -29,7 +30,7 @@ if es_dsl_version >= (6, 0, 0):
 def parse_args():
 	parser = argparse.ArgumentParser(description='This program indexes files to elasticsearch.\n', formatter_class=RawTextHelpFormatter)
 	parser.add_argument('-i', '--input', dest='input', required=False, default='-', help='Input file. Default: stdin.')
-	parser.add_argument('-c', '--cfg', dest='cfg', required=True, help='Configuration file.')
+	parser.add_argument('-c', '--cfg', dest='cfg', required=False, default=False, help='Configuration file.')
 	parser.add_argument('-s', '--separator', dest='separator', required=False, default=';', help='File Separator. Default: ;')
 	#override configuration stuff
 	parser.add_argument('-x', '--index', dest='index', required=False, default=None, help='Elasticsearch index. It overrides the cfg JSON file values. Default: the index specified in the JSON file.')
@@ -80,7 +81,34 @@ def parse_args():
 	parser.add_argument('--geo_column_ip', dest='geo_column_ip', default=None, help='Column name containing IP addresses. Used if geo_precission is set to IP.')
 	parser.add_argument('--geo_int_ip', dest='geo_int_ip', default=False, help='Set if the provided IP addresses are integer numbers.')
 
+	#geo databases stuff
+	parser.add_argument('--regenerate_databases', dest='regenerate_databases', default=False, action='store_true', help='Regenerate geo databases and exit.')
+
 	args = parser.parse_args()
+
+	#set up loggers
+	if not args.show_elastic_logger:
+		for _ in ("elasticsearch", "urllib3"):
+			logging.getLogger(_).setLevel(logging.CRITICAL)
+
+	loggers = [log, logging.getLogger('geodb')]
+	loglevel = logging.DEBUG if args.debug else logging.INFO
+	logging.basicConfig(format="[ %(asctime)s %(levelname)s %(threadName)s ] " + "%(message)s", level=loglevel)
+	#logging.basicConfig(format='%(asctime)s %(message)s', level=loglevel)
+
+	for logger in loggers:
+		logger.setLevel(loglevel)
+
+	if not args.regenerate_databases and not args.cfg:
+		parser.error("-c or --cfg required.")
+	elif args.regenerate_databases:
+		path = get_script_path()
+		import geodb
+		geodb.CountryLevel_GeoDB('db0', '{}/db/countries.csv'.format(path), '{}/db/geodb0.db'.format(path), update=True)
+		log.info('FTS5 Support: {}'.format(geodb.ZIPLevel_GeoDB.check_FTS5_support()))
+		geodb.ZIPLevel_GeoDB('{}/db/multilevel.db'.format(path), '{}/db/create_zip_db.sql.gz'.format(path), update=True)
+		geodb.ZIP_GeoIPDB('db9', '{}/db/IP2LOCATION-LITE-DB9.CSV.gz'.format(path), '{}/db/geodb9.db'.format(path), update=True)
+		sys.exit(1)
 
 	args.geo_precission = args.geo_precission.lower() if args.geo_precission is not None else args.geo_precission
 	if args.geo_precission not in ['ip', 'multilevel', 'country_level', None]:
@@ -111,7 +139,11 @@ def parse_args():
 		log.error('Please provide the --geo_column options')
 		sys.exit(-1)
 
+	log_rss_memory_usage('Before loading geo module.')
 	args.geodb = load_geo_database(args.geo_precission)
+	if args.geodb is not None:
+		log.info('Geo-module loaded.')
+	log_rss_memory_usage('After loading geo module.')
 
 	return args
 
@@ -255,7 +287,7 @@ def create_doc_class(cfg, doc_type, args):
 		dicc[doc_type] = {'_source' : {'enabled' : False}}
 
 	if args.no_all:
-		dicc[doc_type] = {'_all' : {'enabled' : False}}		
+		dicc[doc_type] = {'_all' : {'enabled' : False}}
 
 	DocClass = type(doc_type, (DocType,), dicc)
 	return DocClass
@@ -331,7 +363,7 @@ def typed_iterator(cfg, index, doc_type, args, f):
 			dicc = {cfg['order_in_file'][i]: parse_property(value, cfg['properties'][cfg['order_in_file'][i]], args) for i, value in enumerate(sline)}
 			if args.geo_precission is not None:
 				dicc = geo_append(dicc, args)
-				
+
 			a = {'_source' : dicc, '_index'  : index, '_type'   : doc_type}
 
 			if args.md5_id:
@@ -357,7 +389,7 @@ def input_generator(cfg, index, doc_type, args, f):
 		#geo_stuff
 		if args.geo_precission is not None:
 			dicc = geo_append(dicc, args)
-			
+
 		a = {'_source' : dicc, '_index'  : index, '_type'   : doc_type}
 
 		if args.md5_id:
@@ -410,20 +442,6 @@ if __name__ == '__main__':
 
 	signal.signal(signal.SIGINT, signal_handler)
 
-	#set up loggers
-	if not args.show_elastic_logger:
-		for _ in ("elasticsearch", "urllib3"):
-			logging.getLogger(_).setLevel(logging.CRITICAL)
-
-	loggers = [log, logging.getLogger('geodb')]
-	loglevel = logging.DEBUG if args.debug else logging.INFO
-	logging.basicConfig(format="[ %(asctime)s %(levelname)s %(threadName)s ] " + "%(message)s", level=loglevel)
-	#logging.basicConfig(format='%(asctime)s %(message)s', level=loglevel)
-
-	for logger in loggers:
-		logger.setLevel(loglevel)
-
-
 	cfg_errors = False
 	for column in args.geo_fields.values():
 		if column not in cfg['order_in_file']:
@@ -475,9 +493,9 @@ if __name__ == '__main__':
 			log.warn('Using deflate compression for index {}.'.format(index))
 			index_obj.__dict__['_settings']['index.codec']='best_compression'
 		index_obj.save()
-	
+
 	DocClass.init(index=index, using=es)
-	
+
 	#create the file iterator
 	try:
 		if args.input != '-':
@@ -509,7 +527,7 @@ if __name__ == '__main__':
 	start_indexing = time.time()
 	ret = helpers.parallel_bulk(es, documents, raise_on_exception=args.raise_on_exception, thread_count=args.threads, queue_size=args.queue, chunk_size=args.bulk, raise_on_error=args.raise_on_error)
 	failed_items = []
-	
+
 	if not args.noprogress:
 		progress_thread = Thread( target=progress_t, args=("ProgressT", ) )
 		progress_thread.start()
@@ -531,7 +549,7 @@ if __name__ == '__main__':
 				failed_items = []
 	if not args.noprogress:
 		progress_thread.join()
-	end = time.time() 
+	end = time.time()
 	elapsed = end - start_indexing
 	speed = abs_ctr/float(elapsed)
 	log.info('Success: {}, Failed: {}. Elapsed: {:.4f} (sec.). Speed: {:.4f} (reg/s)'.format(index_success, index_failed, elapsed, speed))
