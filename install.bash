@@ -30,7 +30,7 @@ elif yum --version &> /dev/null; then
 	echo "[ - RHEL/CentOS based system detected ]"
 	yum update -y
 	yum groupinstall -y 'Development Tools'
-	yum install -y sudo wget which git python-pip python-virtualenv sqlite-devel tcl tcl-devel epel-release
+	yum install -y sudo wget which git python-pip python-virtualenv sqlite-devel tcl tcl-devel epel-release deltarpm
 	sudo yum update -y
 	echo "[ - Default sqlite3 version $(sqlite3 --version) and python module $(python -c 'import sqlite3; print(sqlite3.sqlite_version)')]"
 	wget "https://www.sqlite.org/src/tarball/sqlite.tar.gz?r=release" -O sqlite.tar.gz &> /dev/null && tar -xzvf sqlite.tar.gz && rm -f sqlite.tar.gz
@@ -55,21 +55,21 @@ mkdir pypy
 tar jxf pypy.tar.bz2 -C pypy --strip-components=1 && rm -f pypy.tar.bz2
 rm -f pypy/lib/libsqlite3.so.0
 echo "[ - Downloaded pypy version $(./pypy/bin/pypy --version) ]"
-echo "[ - Sqlite3 version $(./pypy/bin/pypy -c 'import sqlite3; print(sqlite3.sqlite_version)') ]"
 ./pypy/bin/virtualenv-pypy .envpypy
 source .envpypy/bin/activate
+echo "[ - Sqlite3 version $(./pypy/bin/pypy -c 'import sqlite3; print(sqlite3.sqlite_version)') ]"
 python -m pip install -r requirements.txt
 echo "[ - DO NOT run pytest with pypy, otherwise it will require huge amount of memory due to a strange leak from pypy+pytest ]"
 deactivate
 echo "[ - Remember to enable the virtualenv with 'source .envpypy/bin/activate' if pypy is to be used ]"
 echo " ============================ "
-echo "[ - Installing virtualenv for Python3 ]"
-virtualenv .env_py3 -p `which python3`
-source .env_py3/bin/activate
-python -m pip install -r requirements.txt
+echo "[ - Installing virtualenv for $(python --version) ]"
+virtualenv .env
+source .env/bin/activate
+pip install -r requirements.txt
 echo "[ - Checking tests... ]"
 python -m pytest
 echo "[ - Genarating geo-databases... in the ./db/ directory ]"
 python elasticImporter.py --regenerate_databases
 deactivate
-echo "[ - Remember to enable the virtualenv with 'source .env_py3/bin/activate' if Python3 is to be used ]"
+echo "[ - Remember to enable the virtualenv with 'source .env/bin/activate' if $(python --version) is to be used ]"
