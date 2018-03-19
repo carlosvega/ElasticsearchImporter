@@ -26,15 +26,6 @@ if command -v apt-get &> /dev/null ; then
 	sudo apt-get update -y
 	sudo apt-get install -y pypy pypy-dev
 	sudo apt-get install -y --only-upgrade pypy
-	sudo pip install pip --upgrade
-	#install repo
-	echo "[ - Installing repo ]"
-	virtualenv .envpypy --python=`which pypy`
-	source .envpypy/bin/activate
-	pypy -m pip install -r requirements.txt
-	py.test
-	deactivate
-	echo "[ - Remember to enable the virtualenv with 'source .envpypy/bin/activate' ]"
 elif yum --version &> /dev/null; then
 	echo "[ - RHEL/CentOS based system detected ]"
 	yum update -y
@@ -48,24 +39,37 @@ elif yum --version &> /dev/null; then
 	sudo echo "/usr/local/lib" > /etc/ld.so.conf.d/sqlite.conf && ldconfig
 	echo "[ - Installed sqlite3 version $(sqlite3 --version) and python module $(python -c 'import sqlite3; print(sqlite3.sqlite_version)')]"
 	cd -
-	echo "installing pypy"
-	yum install -y pypy pypy-devel geos-devel
-	echo "[ - Repository pypy version $(pypy --version) ]"
-	pip install pip --upgrade
-	pypy -m ensurepip
-	echo "[ - Installing repo ]"
-	wget https://bitbucket.org/squeaky/portable-pypy/downloads/pypy-5.10.0-linux_x86_64-portable.tar.bz2 -O pypy.tar.bz2 &> /dev/null
-	mkdir pypy
-	tar jxf pypy.tar.bz2 -C pypy --strip-components=1 && rm -f pypy.tar.bz2
-	echo "[ - Downloaded pypy version $(./pypy/bin/pypy --version) ]"
-	virtualenv .envpypy --python="$(pwd)/pypy/bin/pypy"
-	source .envpypy/bin/activate
-	pypy -m ensurepip
-	python -m pip install -r requirements.txt
-	py.test
-	deactivate
-	echo "[ - Remember to enable the virtualenv with 'source .envpypy/bin/activate' ]"
+	echo "[ - Installing pypy fromn repositories ]"
+	yum install -y pypy pypy-devel geos-devel python-numpy python-scipy python-matplotlib python-pandas
 else
     echo "[ - Sorry, at the moment, the installation script only supports ubuntu systems, preferably Ubuntu 16.04 ]"
     exit
 fi
+echo "[ - Repository pypy version $(pypy --version) ]"
+sudo pip install pip --upgrade
+sudo pypy -m ensurepip
+echo " ============================ "
+echo "[ - Installing virtualenv for PyPy ]"
+wget https://bitbucket.org/squeaky/portable-pypy/downloads/pypy-5.10.0-linux_x86_64-portable.tar.bz2 -O pypy.tar.bz2 &> /dev/null
+mkdir pypy
+tar jxf pypy.tar.bz2 -C pypy --strip-components=1 && rm -f pypy.tar.bz2
+rm -f pypy/lib/libsqlite3.so.0
+echo "[ - Downloaded pypy version $(./pypy/bin/pypy --version) ]"
+echo "[ - Sqlite3 version $(./pypy/bin/pypy -c 'import sqlite3; print(sqlite3.sqlite_version)') ]"
+./pypy/bin/virtualenv-pypy .envpypy
+source .envpypy/bin/activate
+python -m pip install -r requirements.txt
+echo "[ - DO NOT run pytest with pypy, otherwise it will require huge amount of memory due to a strange leak from pypy+pytest ]"
+deactivate
+echo "[ - Remember to enable the virtualenv with 'source .envpypy/bin/activate' if pypy is to be used ]"
+echo " ============================ "
+echo "[ - Installing virtualenv for Python3 ]"
+virtualenv .env_py3 -p `which python3`
+source .env_py3/bin/activate
+python -m pip install -r requirements.txt
+echo "[ - Checking tests... ]"
+python -m pytest
+echo "[ - Genarating geo-databases... in the ./db/ directory ]"
+python elasticImporter.py --regenerate_databases
+deactivate
+echo "[ - Remember to enable the virtualenv with 'source .env_py3/bin/activate' if Python3 is to be used ]"
