@@ -47,8 +47,8 @@ Executing a 10 Million lines test:
 yes '1509750000000;52.5720661, 52.5720661;192.168.1.1;PotatoFriend;This is a potato and it is your friend;20;201.1' | head -10000000 | pv -l | time python3 elasticImporter.py -c example.cfg
 ```
 
-pv command reports: 37.4 K lines/s
-tool speed reports: 37.7 K lines/s
+- pv command reports: 37.4 K lines/s
+- tool speed reports: 37.7 K lines/s
 
 ### Python 2.7.12
 
@@ -56,8 +56,8 @@ tool speed reports: 37.7 K lines/s
 yes '1509750000000;52.5720661, 52.5720661;192.168.1.1;PotatoFriend;This is a potato and it is your friend;20;201.1' | head -10000000 | pv -l | time python3 elasticImporter.py -c example.cfg
 ```
 
-pv command reports: 25.4 K lines/s
-tool speed reports: 25.3 K lines/s
+- pv command reports: 25.4 K lines/s
+- tool speed reports: 25.3 K lines/s
 
 ### PyPy 5.10
 
@@ -65,8 +65,8 @@ tool speed reports: 25.3 K lines/s
 yes '1509750000000;52.5720661, 52.5720661;192.168.1.1;PotatoFriend;This is a potato and it is your friend;20;201.1' | head -10000000 | pv -l | time pypy elasticImporter.py -c example.cfg
 ```
 
-pv command reports: 42.2 K lines/s
-tool speed reports: 42.7 K lines/s
+- pv command reports: 42.2 K lines/s
+- tool speed reports: 42.7 K lines/s
 
 ## Options (might be some options more, do python elasticImporter.py -h)
 
