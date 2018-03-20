@@ -62,7 +62,7 @@ In the [example.cfg](https://github.com/carlosvega/ElasticsearchImporter/blob/ma
 		"size" : "float"
 	},
 	"order_in_file" : ["timestamp", "geo", "ip", "name", "description", "age", "size"]
-	
+
 }
 ```
 
@@ -71,24 +71,64 @@ In the [example.cfg](https://github.com/carlosvega/ElasticsearchImporter/blob/ma
 ```Bash
 git clone git@github.com:carlosvega/ElasticsearchImporter.git ElasticsearchImporter
 cd ElasticsearchImporter
-pip install virtualenv
-virtualenv myenv -p `which python3`
-source myenv/bin/activate 
-sudo apt-get update
-sudo apt-get install build-essential libssl-dev libffi-dev python-dev
-sudo pip2 install --upgrade urllib3[secure] requests[security] pyopenssl ndg-httpsclient pyasn1 pip
-pip2 install -rU requirements.txt 
-#index your first 100K lines
-time yes '1509750000000;52.5720661, 52.5720661;192.168.1.1;PotatoFriend;This is a potato and it is your friend;20;201.1' | head -100000 | pv -l | python3 elasticImporter.py -c example.cfg
+bash install.bash
 ```
+
+### Ubuntu Docker
+
+```Bash
+git clone git@github.com:carlosvega/ElasticsearchImporter.git ElasticsearchImporter
+cd ElasticsearchImporter
+docker build -f Dockerfile.ubuntu -t ubuntu_esimporter .
+```
+
+### CentOS Docker
+
+```Bash
+git clone git@github.com:carlosvega/ElasticsearchImporter.git ElasticsearchImporter
+cd ElasticsearchImporter
+docker build -f Dockerfile.centos -t centos_esimporter .
+```
+
+## Considerations
+
+The tool works with elasticsearch 6.2.2 but uses elasticsearch-dsl module version >=5.0.0,<6.0.0 because version 6.x of this module breaks backwards compatibility.
+The tool might not work with higher versions of elasticsearch than 6.2.2.
+
+Python 2 does not handle very well the Ctrl+C interruption. Do Ctrl+Z, then jobs, and kill %1 (if the only job is the tool) to kill it.
+PyPy sometimes handles it and sometimes not, but Python 3 seems to work without any issue.
 
 ## Performance
 
-On a Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz with 32GB of RAM using Elasticsearch 6.0.1  with a 4GB Heap.
+On a Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz with 32GB of RAM using Elasticsearch 6.2.2  with a 4GB Heap.
 Executing a 10 Million lines test:
 
+![Performance Comparison of the tool](https://github.com/carlosvega/ElasticsearchImporter/raw/master/es_importer_bench.png)
+
+### Python 3.5.2
+
 ```Bash
-yes '1509750000000;52.5720661, 52.5720661;192.168.1.1;PotatoFriend;This is a potato and it is your friend;20;201.1' | head -10000000 | pv -l | time python3 elasticImporter.py -c example.cfg                                                             
+yes '1509750000000;52.5720661, 52.5720661;192.168.1.1;PotatoFriend;This is a potato and it is your friend;20;201.1' | head -10000000 | pv -l | time python3 elasticImporter.py -c example.cfg
 ```
 
-Python: 37871.615 lines/s
+pv command reports: 37.4 K lines/s
+tool speed reports: 37.7 K lines/s
+
+### Python 2.7.12
+
+```Bash
+yes '1509750000000;52.5720661, 52.5720661;192.168.1.1;PotatoFriend;This is a potato and it is your friend;20;201.1' | head -10000000 | pv -l | time python3 elasticImporter.py -c example.cfg
+```
+
+pv command reports: 25.4 K lines/s
+tool speed reports: 25.3 K lines/s
+
+### PyPy 5.10
+
+```Bash
+yes '1509750000000;52.5720661, 52.5720661;192.168.1.1;PotatoFriend;This is a potato and it is your friend;20;201.1' | head -10000000 | pv -l | time pypy elasticImporter.py -c example.cfg
+```
+
+pv command reports: 42.2 K lines/s
+tool speed reports: 42.7 K lines/s
+
