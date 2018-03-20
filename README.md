@@ -36,6 +36,7 @@ PyPy sometimes handles it and sometimes not, but Python 3 seems to work without 
 ## Performance
 
 On a Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz with 32GB of RAM using Elasticsearch 6.2.2  with a 4GB Heap.
+
 Executing a 10 Million lines test:
 
 <img src="https://github.com/carlosvega/ElasticsearchImporter/raw/master/es_importer_bench.png" alt="Performance Comparison of the tool" data-canonical-src="https://github.com/carlosvega/ElasticsearchImporter/raw/master/es_importer_bench.png" width="400" />
