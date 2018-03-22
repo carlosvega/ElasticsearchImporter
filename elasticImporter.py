@@ -46,6 +46,7 @@ def parse_args():
 	parser.add_argument('--refresh', dest='refresh', default=False, action='store_true', help='Refresh the index when finished.')
 	parser.add_argument('--delete', dest='delete', default=False, action='store_true', help='Delete the index before process.')
 	parser.add_argument('--utf8', dest='utf8', default=False, action='store_true', help='Change the default encoding to utf8. In python2 performance is drastically affected. No effect in python3.')
+	parser.add_argument('-X', '--extra_data', dest='extra_data', required=False, default=None, help='Pairs field:value with value beeing a keyword string that will be indexed with each document. Multiple pairs allowed with \';;;\' as separator. For example: --extra_data \'service:mail;;;host:mailserver\'')
 	parser.add_argument('--typed_iterator', dest='typed_iterator', default=False, action='store_true', help='If true, use a typed iterator that checks the value types and parses them. Reduces performance.')
 	#meta stuff to consider when creating indices
 	parser.add_argument('--replicas', dest='replicas', default=0, help='Number of replicas for the index if it does not exist. Default: 0')
@@ -109,6 +110,14 @@ def parse_args():
 		geodb.ZIPLevel_GeoDB('{}/db/multilevel.db'.format(path), '{}/db/create_zip_db.sql.gz'.format(path), update=True)
 		geodb.ZIP_GeoIPDB('db9', '{}/db/IP2LOCATION-LITE-DB9.CSV.gz'.format(path), '{}/db/geodb9.db'.format(path), update=True)
 		sys.exit(1)
+
+	if args.extra_data is not None:
+		pairs = args.extra_data.split(';;;')
+		extra_data_dicc = {}
+		for pair in pairs:
+			fieldname, fieldvalue = pair.split(':')
+			extra_data_dicc[fieldname] = fieldvalue
+		args.extra_data = extra_data_dicc
 
 	args.geo_precission = args.geo_precission.lower() if args.geo_precission is not None else args.geo_precission
 	if args.geo_precission not in ['ip', 'multilevel', 'country_level', None]:
@@ -283,6 +292,10 @@ def create_doc_class(cfg, doc_type, args):
 		for key, value in iteritems(extra_geo_fields):
 			dicc[key] = value
 
+	if args.extra_data is not None:
+		for fieldname in args.extra_data:
+			dicc[fieldname] = translate_cfg_property('keyword')
+
 	if args.no_source:
 		dicc[doc_type] = {'_source' : {'enabled' : False}}
 
@@ -361,8 +374,13 @@ def typed_iterator(cfg, index, doc_type, args, f):
 			ctr+=1
 			sline = line.rstrip().split(args.separator)
 			dicc = {cfg['order_in_file'][i]: parse_property(value, cfg['properties'][cfg['order_in_file'][i]], args) for i, value in enumerate(sline)}
+			#geo_stuff
 			if args.geo_precission is not None:
 				dicc = geo_append(dicc, args)
+
+			if args.extra_data is not None:
+				for extra_fieldname in args.extra_data:
+					dicc[extra_fieldname] = parse_property(value, 'keyword')
 
 			a = {'_source' : dicc, '_index'  : index, '_type'   : doc_type}
 
@@ -389,6 +407,10 @@ def input_generator(cfg, index, doc_type, args, f):
 		#geo_stuff
 		if args.geo_precission is not None:
 			dicc = geo_append(dicc, args)
+
+		if args.extra_data is not None:
+			for extra_fieldname in args.extra_data:
+				dicc[extra_fieldname] = args.extra_data[extra_fieldname]
 
 		a = {'_source' : dicc, '_index'  : index, '_type'   : doc_type}
 
