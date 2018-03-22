@@ -153,6 +153,8 @@ def parse_args():
 		log_rss_memory_usage('After loading geo module.')
 		log.info('Geo-module loaded.')
 
+	args.date_fields = []
+
 	return args
 
 #SYS STUFF
@@ -284,10 +286,16 @@ def translate_cfg_property_std(v):
 		return Ip()
 
 def create_doc_class(cfg, doc_type, args):
+	#store dates
+	date_fields = []
 	#create class
 	dicc = {}
 	for k, v in cfg['properties'].items():
 		dicc[k] = translate_cfg_property(v)
+		if v == 'date':
+			date_fields.append(k)
+
+	args.date_fields = date_fields
 
 	if args.geo_precission is not None:
 		extra_geo_fields = get_geodata_field(args.geo_precission)
@@ -419,6 +427,11 @@ def input_generator(cfg, index, doc_type, args, f):
 		if args.extra_data is not None:
 			for extra_fieldname in args.extra_data:
 				dicc[extra_fieldname] = args.extra_data[extra_fieldname]
+
+		if args.dates_in_seconds:
+			for date_field in args.date_fields:
+				if date_field in dicc:
+					dicc[date_field] = dicc[date_field]+'000'
 
 		a = {'_source' : dicc, '_index'  : index, '_type'   : doc_type}
 
