@@ -148,11 +148,10 @@ def parse_args():
 		log.error('Please provide the --geo_column options')
 		sys.exit(-1)
 
-	log_rss_memory_usage('Before loading geo module.')
 	args.geodb = load_geo_database(args.geo_precission)
 	if args.geodb is not None:
+		log_rss_memory_usage('After loading geo module.')
 		log.info('Geo-module loaded.')
-	log_rss_memory_usage('After loading geo module.')
 
 	return args
 
@@ -230,15 +229,18 @@ def get_geodata_field(level):
 def load_geo_database(level):
 	if level == 'country_level':
 		path = get_script_path()
+		log_rss_memory_usage('Before loading geo module.')
 		from geodb import CountryLevel_GeoDB
 		return CountryLevel_GeoDB('db0', '{}/db/countries.csv'.format(path), '{}/db/geodb0.db'.format(path), update=False)
 	elif level == 'multilevel':
 		path = get_script_path()
+		log_rss_memory_usage('Before loading geo module.')
 		from geodb import ZIPLevel_GeoDB
 		log.info('FTS5 Support: {}'.format(ZIPLevel_GeoDB.check_FTS5_support()))
 		return ZIPLevel_GeoDB('{}/db/multilevel.db'.format(path), '{}/db/create_zip_db.sql.gz'.format(path), update=False)
 	elif level == 'ip':
 		path = get_script_path()
+		log_rss_memory_usage('Before loading geo module.')
 		from geodb import ZIP_GeoIPDB
 		return ZIP_GeoIPDB('db9', '{}/db/IP2LOCATION-LITE-DB9.CSV.gz'.format(path), '{}/db/geodb9.db'.format(path), update=False)
 	return None
@@ -422,7 +424,6 @@ def input_generator(cfg, index, doc_type, args, f):
 		yield a
 
 def dummy_iterator(n=100000):
-	element = {'_source': {u'timestamp': '1509750000000', u'geo': '52.5720661, 52.5720661', u'ip': '192.168.1.1', u'name': 'PotatoFriend', u'description': 'This is a potato and it is your friend', u'age': '20', u'size': '201.1'}, '_index': 'patata', '_type': 'my_potato'}
 	j_element = {'_source': json.dumps({u'timestamp': '1509750000000', u'geo': '52.5720661, 52.5720661', u'ip': '192.168.1.1', u'name': 'PotatoFriend', u'description': 'This is a potato and it is your friend', u'age': '20', u'size': '201.1'}), '_index': 'patata', '_type': 'my_potato'}
 	for i in xrange(n):
 		yield j_element
