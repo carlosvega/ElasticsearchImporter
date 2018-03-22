@@ -372,6 +372,7 @@ def typed_iterator(cfg, index, doc_type, args, f):
 	for line in f:
 		try:
 			if ctr == 0 and args.skip_first_line:
+				ctr+=1
 				continue
 			ctr+=1
 			sline = line.rstrip().split(args.separator)
@@ -402,6 +403,7 @@ def input_generator(cfg, index, doc_type, args, f):
 	ctr = 0
 	for line in f:
 		if ctr == 0 and args.skip_first_line:
+			ctr+=1
 			continue
 		ctr+=1
 		sline = line.rstrip().split(args.separator)
