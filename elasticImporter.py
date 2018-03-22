@@ -407,7 +407,11 @@ def input_generator(cfg, index, doc_type, args, f):
 			continue
 		ctr+=1
 		sline = line.rstrip().split(args.separator)
-		dicc = {cfg['order_in_file'][i]: value for i, value in enumerate(sline)}
+		try:
+			dicc = {cfg['order_in_file'][i]: value for i, value in enumerate(sline)}
+		except Exception as e:
+			log.warning('Error processing line {}. Continuing...'.format(ctr))
+			continue
 		#geo_stuff
 		if args.geo_precission is not None:
 			dicc = geo_append(dicc, args)
