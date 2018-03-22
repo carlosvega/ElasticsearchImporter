@@ -12,7 +12,7 @@ from elasticsearch_dsl.connections import connections
 import fileinput, logging, argparse, gc, codecs, json, math, hashlib, signal, os, traceback, time
 from argparse import RawTextHelpFormatter
 from datetime import datetime
-from threading import Thread
+from threading import Thread, Event
 from debug_utils import log_rss_memory_usage
 
 log = logging.getLogger(__name__)
@@ -405,19 +405,18 @@ def dummy_iterator(n=100000):
 	for i in xrange(n):
 		yield j_element
 
-def progress_t(threadname):
-	global start_indexing, index_success, index_failed, index_relative_ctr
-	prev_value = None
-	while True:
-		time.sleep(0.01)
-		temp_abs_ctr = index_success+index_failed
-		if index_relative_ctr >= 500000 and prev_value != temp_abs_ctr:
-			index_relative_ctr = 0
-			prev_value = temp_abs_ctr
-			lap_elapsed = time.time() - start_indexing
-			lap_speed = temp_abs_ctr/float(lap_elapsed)
-			log.info('Success: {}, Failed: {}. Elapsed: {:.4f} (sec.). Speed: {:.4f} (reg/s)'.format(index_success, index_failed, lap_elapsed, lap_speed))
-			gc.collect()
+def progress_t(threadname, stop_event):
+    global start_indexing, index_success, index_failed, index_relative_ctr
+    prev_value = 0
+    while(not stop_event.is_set()):
+            stop_event.wait(2)
+            temp_abs_ctr = index_success+index_failed
+            if prev_value != temp_abs_ctr:
+                    index_relative_ctr = 0
+                    prev_value = temp_abs_ctr
+                    lap_elapsed = time.time() - start_indexing
+                    lap_speed = temp_abs_ctr/float(lap_elapsed)
+                    log.info('Success: {}, Failed: {}. Elapsed: {:.4f} (sec.). Speed: {:.4f} (reg/s)'.format(index_success, index_failed, lap_elapsed, lap_speed))
 
 if __name__ == '__main__':
 	#GLOBAL VARIABLES FOR progress_t
@@ -528,8 +527,10 @@ if __name__ == '__main__':
 	ret = helpers.parallel_bulk(es, documents, raise_on_exception=args.raise_on_exception, thread_count=args.threads, queue_size=args.queue, chunk_size=args.bulk, raise_on_error=args.raise_on_error)
 	failed_items = []
 
+	progress_t_stop = None
 	if not args.noprogress:
-		progress_thread = Thread( target=progress_t, args=("ProgressT", ) )
+		progress_t_stop = Event()
+		progress_thread = Thread( target=progress_t, args=("ProgressT", progress_t_stop) )
 		progress_thread.start()
 	index_failed = 0; index_success = 0; abs_ctr=0; index_relative_ctr=0
 	for ok, item in ret:
@@ -548,6 +549,7 @@ if __name__ == '__main__':
 				log.error('These were the errors in lines: {}'.format(failed_items))
 				failed_items = []
 	if not args.noprogress:
+		progress_t_stop.set()
 		progress_thread.join()
 	end = time.time()
 	elapsed = end - start_indexing
