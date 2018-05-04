@@ -448,7 +448,7 @@ def dummy_iterator(n=100000):
 		yield j_element
 
 def progress_t(threadname, stop_event):
-    global start_indexing, index_success, index_failed, index_relative_ctr
+    global start_indexing, index_success, index_failed, index_relative_ctr, failed_items
     prev_value = 0
     while(not stop_event.is_set()):
             stop_event.wait(2)
@@ -459,10 +459,12 @@ def progress_t(threadname, stop_event):
                     lap_elapsed = time.time() - start_indexing
                     lap_speed = temp_abs_ctr/float(lap_elapsed)
                     log.info('Success: {}, Failed: {}. Elapsed: {:.4f} (sec.). Speed: {:.4f} (reg/s)'.format(index_success, index_failed, lap_elapsed, lap_speed))
+                    if index_failed:
+                    	log.debug('Failed lines: {}'.format(failed_items))
 
 if __name__ == '__main__':
 	#GLOBAL VARIABLES FOR progress_t
-	index_failed = -1; index_success = -1; start_indexing=0; index_relative_ctr=0
+	index_failed = -1; index_success = -1; start_indexing=0; index_relative_ctr=0; failed_items = []
 	#END OF GLOBAL VARIABLES
 
 	#load parameters
@@ -567,7 +569,6 @@ if __name__ == '__main__':
 
 	start_indexing = time.time()
 	ret = helpers.parallel_bulk(es, documents, raise_on_exception=args.raise_on_exception, thread_count=args.threads, queue_size=args.queue, chunk_size=args.bulk, raise_on_error=args.raise_on_error)
-	failed_items = []
 
 	progress_t_stop = None
 	if not args.noprogress:
@@ -585,7 +586,7 @@ if __name__ == '__main__':
 			index_failed+=1
 			failed_items.append(abs_ctr)
 			#better here than in progress_t because less executions are made
-			if len(failed_items) > 10000:
+			if len(failed_items) > 1000:
 				log.error('More than 10K errors, clearing error list.')
 				log.error('There were some errors during the process: Success: {0}, Failed: {1}'.format(index_success, index_failed))
 				log.error('These were the errors in lines: {}'.format(failed_items))
