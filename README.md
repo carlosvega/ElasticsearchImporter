@@ -44,7 +44,7 @@ Executing a 10 Million lines test:
 ### Python 2.7.12
 
 ```Bash
-yes '1509750000000;52.5720661, 52.5720661;192.168.1.1;PotatoFriend;This is a potato and it is your friend;20;201.1' | head -10000000 | pv -l | time python3 elasticImporter.py -c example.cfg
+yes '1509750000000;52.5720661, 52.5720661;192.168.1.1;PotatoFriend;This is a potato and it is your friend;20;201.1' | head -10000000 | pv -l | time python elasticImporter.py -c example.cfg
 ```
 
 - pv command reports: 25.4 K lines/s
