@@ -83,7 +83,7 @@ def parse_args():
 	parser.add_argument('--geo_int_ip', dest='geo_int_ip', default=False, help='Set if the provided IP addresses are integer numbers.')
 
 	#geo databases stuff
-	parser.add_argument('--regenerate_databases', dest='regenerate_databases', default=False, action='store_true', help='Regenerate geo databases and exit.')
+	parser.add_argument('--regenerate_databases', dest='regenerate_databases', nargs = '*', required=False, default=[], help='Regenerate geo databases and exit. Specify the databases to regenerate: db9, db0, multilevel.')
 
 	args = parser.parse_args()
 
@@ -100,15 +100,28 @@ def parse_args():
 	for logger in loggers:
 		logger.setLevel(loglevel)
 
-	if not args.regenerate_databases and not args.cfg:
+	if len(args.regenerate_databases) == 0 and not args.cfg:
 		parser.error("-c or --cfg required.")
-	elif args.regenerate_databases:
+	elif len(args.regenerate_databases) > 0:
 		path = get_script_path()
 		import geodb
-		geodb.CountryLevel_GeoDB('db0', '{}/db/countries.csv'.format(path), '{}/db/geodb0.db'.format(path), update=True)
-		log.info('FTS5 Support: {}'.format(geodb.ZIPLevel_GeoDB.check_FTS5_support()))
-		geodb.ZIPLevel_GeoDB('{}/db/multilevel.db'.format(path), '{}/db/create_zip_db.sql.gz'.format(path), update=True)
-		geodb.ZIP_GeoIPDB('db9', '{}/db/IP2LOCATION-LITE-DB9.CSV.gz'.format(path), '{}/db/geodb9.db'.format(path), update=True)
+		if 'db0' in args.regenerate_databases:
+			fname = '{}/db/geodb0.db'.format(path)
+			if os.path.isfile(fname):
+				os.remove(fname)
+			geodb.CountryLevel_GeoDB('db0', '{}/db/countries.csv'.format(path), fname, update=True)
+		if 'multilevel' in args.regenerate_databases:
+			fname = '{}/db/create_zip_db.sql.gz'.format(path)
+			if os.path.isfile(fname):
+				os.remove(fname)
+			log.info('FTS5 Support: {}'.format(geodb.ZIPLevel_GeoDB.check_FTS5_support()))
+			geodb.ZIPLevel_GeoDB('{}/db/multilevel.db'.format(path), fname, update=True)
+		if 'db9' in args.regenerate_databases:
+			fname = '{}/db/geodb9.db'.format(path)
+			if os.path.isfile(fname):
+				os.remove(fname)
+			fname = '{}/db/geodb9.db'.format(path)
+			geodb.ZIP_GeoIPDB('db9', '{}/db/IP2LOCATION-LITE-DB9.CSV.gz'.format(path), fname, update=True)
 		sys.exit(1)
 
 	if args.extra_data is not None:
