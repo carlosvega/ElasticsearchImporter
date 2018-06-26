@@ -88,7 +88,6 @@ class GeoDatabase_Base(object):
 		:param update: If True, removes the previous database file and regenerates the database. Otherwise just loads the database.
 		:return: SQL connection to sqlite3.
 		"""
-
 		if not (os.path.exists(self.db_path) and os.path.isfile(self.db_path)):
 			self.update = True
 
@@ -103,12 +102,16 @@ class GeoDatabase_Base(object):
 			#LOADING DATABASE FROM FILE
 			log_rss_memory_usage('Before reading csv database.')
 			df = pd.read_csv(self.original_db_path, sep=self.separator, names=self.names, dtype=self.types, compression=self.compression, keep_default_na=False, na_values=['-1.#IND', '1.#QNAN', '1.#IND', '-1.#QNAN', '#N/A N/A', '#N/A', 'N/A', 'n/a', '#NA', 'NULL', 'null', 'NaN', '-NaN', 'nan', '-nan', ''], encoding='utf-8')
+			df.columns = [column.lower() for column in df.columns]
 			log_rss_memory_usage('After reading csv database.')
-			for column, t in df.dtypes.iteritems():
-				if t == np.dtype('O'):
-					df[column] = df[column].str.upper()
+			# The original file must be in uppercase, this avoids using the following loop whichs some how uses a lot of memory
+			# for column, t in df.dtypes.iteritems():
+			# 	if t == np.dtype('O'):
+			# 		df[column] = df[column].str.upper()
 			self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
-			df.to_sql(self.name, self.conn, if_exists='replace')
+			log_rss_memory_usage('Before to_sql.')
+			df.to_sql(self.name, self.conn, if_exists='replace', chunksize=1000)
+			log_rss_memory_usage('After to_sql.')
 			del df
 			gc.collect()
 			log_rss_memory_usage('After creating sql database.')
@@ -240,7 +243,7 @@ class ZIPLevel_GeoDB(GeoDatabase_Base):
 	names = ['country_code', 'zip_code', 'place_name', 'admin_name1', 'admin_code1', 'admin_name2', 'admin_code2', 'admin_name3', 'admin_code3', 'latitude', 'longitude', 'accuracy']
 	types = {'country_code': str, 'zip_code': str, 'place_name': str, 'admin_name1': str, 'admin_code1': str, 'admin_name2': str, 'admin_code2': str, 'admin_name3': str, 'admin_code3': str, 'latitude': float, 'longitude': float, 'accuracy': float }
 	indices = []
-	def __init__(self, db_path, original_db_path, name='geoinfo', names=[], types=[], index_columns=[], update=False):
+	def __init__(self, name, original_db_path, db_path, names=[], types=[], index_columns=[], update=False):
 		if len(names) == 0:
 			names = ZIPLevel_GeoDB.names
 		if len(types) == 0:
