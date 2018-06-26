@@ -10,7 +10,7 @@ print(available_pragmas)
 
 if ('ENABLE_FTS5',) in available_pragmas:
     print('YES')
-    sys.exit(1)
+    sys.exit(0)
 else:
     print('NO')
-    sys.exit(0)
+    sys.exit(1)

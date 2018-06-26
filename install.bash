@@ -65,11 +65,11 @@ function check_FTS5 {
 	echo "[ - Checking if current sqlite3 installation supports FTS5... ]"
 	python checheck_fts5.py &> /dev/null
 	fts5_support=$?
-	if [[ "$fts5_support" -gt 0 ]]
+	if [[ "$fts5_support" -eq 0 ]]
 	then
 		echo "[ - Congratulations, your current sqlite3 installation supports FTS5 ]"
 	else
-		echo "[ - Your current sqlite3 installation DOES NOT supports FTS5 ]"
+		echo "[ - Your current sqlite3 installation DOES NOT support FTS5 ]"
 	fi
 }
 

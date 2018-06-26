@@ -4,11 +4,11 @@ function check_FTS5 {
 	echo "[ - Checking if current sqlite3 installation supports FTS5... ]"
 	python check_fts5.py &> /dev/null
 	fts5_support=$?
-	if [[ "$fts5_support" -gt 0 ]]
+	if [[ "$fts5_support" -eq 0 ]]
 	then
 		echo "[ - Congratulations, your current sqlite3 installation supports FTS5 ]"
 	else
-		echo "[ - Your current sqlite3 installation DOES NOT supports FTS5 ]"
+		echo "[ - Your current sqlite3 installation DOES NOT support FTS5 ]"
 	fi
 }
 
@@ -27,7 +27,7 @@ check_FTS5
 
 if command -v apt-get &> /dev/null ; then
     echo "[ - Debian/Ubuntu based system detected ]"
-    if [[ "$fts5_support" -eq 0 ]]
+    if [[ "$fts5_support" -ne 0 ]]
     then
 	    sudo apt-get update -y
 		echo "[ - Removing sqlite3... ]"
