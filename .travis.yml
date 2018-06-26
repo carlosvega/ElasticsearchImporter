@@ -1,13 +1,24 @@
 matrix:
   include:
-    - env: OS='ubuntu:14.04'
-    - env: OS='centos:7'
-language: python
-python:
-  - "2.7"
-  - "3.5"
-  - "3.6"
-install:
-  - pip install -r requirements.txt
-script:
-  - py.test -v
+    - os: linux
+      sudo: required
+      dist: precise
+      language: python
+      install:
+        - pip install -r requirements.txt
+      python:
+        - "2.7"
+        - "3.6"
+      script:
+        - py.test -v
+    - os: linux
+      sudo: required
+      dist: trusty
+      language: python
+      install:
+        - pip install -r requirements.txt
+      python:
+        - "2.7"
+        - "3.6"
+      script:
+        - py.test -v
