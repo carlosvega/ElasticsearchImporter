@@ -85,6 +85,10 @@ def parse_args():
 	#geo databases stuff
 	parser.add_argument('--regenerate_databases', dest='regenerate_databases', nargs = '*', required=False, default=[], help='Regenerate geo databases and exit. Specify the databases to regenerate: db9, db0, multilevel.')
 
+	#stuff for TOR information
+	parser.add_argument('--tor-info-from', dest='tor_info_from', default=False, help='Column name containing IP addresses. Information will be added about the relation (if any) of the IP to the TOR network.')
+	parser.add_argument('--tor-int-ip', dest='tor_int_ip', default=False, help='Set if the provided IP addresses are integer numbers.')
+
 	args = parser.parse_args()
 
 	#set up loggers
@@ -111,11 +115,12 @@ def parse_args():
 				os.remove(fname)
 			geodb.CountryLevel_GeoDB('db0', '{}/db/countries.csv'.format(path), fname, update=True)
 		if 'multilevel' in args.regenerate_databases:
-			fname = '{}/db/create_zip_db.sql.gz'.format(path)
+			fname = '{}/db/multilevel.db'.format(path)
 			if os.path.isfile(fname):
 				os.remove(fname)
 			log.info('FTS5 Support: {}'.format(geodb.ZIPLevel_GeoDB.check_FTS5_support()))
-			geodb.ZIPLevel_GeoDB('{}/db/multilevel.db'.format(path), fname, update=True)
+			geodb.ZIPLevel_GeoDB('geoinfo', '{}/db/create_zip_db.sql.gz'.format(path), '{}/db/multilevel.db'.format(path), update=True)
+			#geodb.ZIPLevel_GeoDB('{}/db/multilevel.db'.format(path), '{}/db/create_zip_db.sql.gz'.format(path), update=True)
 		if 'db9' in args.regenerate_databases:
 			fname = '{}/db/geodb9.db'.format(path)
 			if os.path.isfile(fname):
@@ -166,6 +171,12 @@ def parse_args():
 		log_rss_memory_usage('After loading geo module.')
 		log.info('Geo-module loaded.')
 
+	args.tor_info = None
+	if args.tor_info_from != False:
+		logging.info('Loading TORinfo module.')
+		from torinfo import TORinfo
+		args.tor_info = TORinfo('db/Tor_ip_list_EXIT.csv', 'db/Tor_ip_list_ALL.csv')
+
 	args.date_fields = []
 
 	return args
@@ -173,6 +184,14 @@ def parse_args():
 #SYS STUFF
 def get_script_path():
 	return os.path.dirname(os.path.realpath(sys.argv[0]))
+
+#TOR STUFF
+def get_torinfo_field():
+	extra_tor_fields = {}
+	extra_tor_fields['tor_info'] = translate_cfg_property('keyword')
+	extra_tor_fields['tor_is_exit_node'] = translate_cfg_property('boolean')
+	extra_tor_fields['tor_is_tor_server'] = translate_cfg_property('boolean')
+	return extra_tor_fields
 
 #GEO LOCATION STUFF
 def get_geodata_field(level):
@@ -279,6 +298,8 @@ def translate_cfg_property_2x(v):
 		return GeoPoint()
 	elif v == 'ip':
 		return Ip()
+	elif v == 'boolean':
+		return Boolean()
 
 def translate_cfg_property_std(v):
 	if v == 'date':
@@ -297,6 +318,8 @@ def translate_cfg_property_std(v):
 		return GeoPoint()
 	elif v == 'ip':
 		return Ip()
+	elif v == 'boolean':
+		return Boolean()
 
 def create_doc_class(cfg, doc_type, args):
 	#store dates
@@ -313,6 +336,11 @@ def create_doc_class(cfg, doc_type, args):
 	if args.geo_precission is not None:
 		extra_geo_fields = get_geodata_field(args.geo_precission)
 		for key, value in iteritems(extra_geo_fields):
+			dicc[key] = value
+
+	if args.tor_info is not None:
+		extra_tor_fields = get_torinfo_field()
+		for key, value in iteritems(extra_tor_fields):
 			dicc[key] = value
 
 	if args.extra_data is not None:
@@ -402,6 +430,13 @@ def typed_iterator(cfg, index, doc_type, args, f):
 			if args.geo_precission is not None:
 				dicc = geo_append(dicc, args)
 
+			#tor_stuff
+			if args.tor_info is not None:
+				aux_tor_check_val = dicc.get(args.tor_info_from, None)
+				dicc['tor_info'] = args.tor_info.getTorInfo(aux_tor_check_val, int_ip=args.tor_int_ip)
+				dicc['tor_is_exit_node'] = args.tor_info.isExitNode(aux_tor_check_val, int_ip=args.tor_int_ip)
+				dicc['tor_is_tor_server'] = args.tor_info.isTorServer(aux_tor_check_val, int_ip=args.tor_int_ip)
+
 			if args.extra_data is not None:
 				for extra_fieldname in args.extra_data:
 					dicc[extra_fieldname] = parse_property(value, 'keyword')
@@ -436,6 +471,13 @@ def input_generator(cfg, index, doc_type, args, f):
 		#geo_stuff
 		if args.geo_precission is not None:
 			dicc = geo_append(dicc, args)
+
+		#tor_stuff
+		if args.tor_info is not None:
+			aux_tor_check_val = dicc.get(args.tor_info_from, None)
+			dicc['tor_info'] = args.tor_info.getTorInfo(aux_tor_check_val, int_ip=args.tor_int_ip)
+			dicc['tor_is_exit_node'] = args.tor_info.isExitNode(aux_tor_check_val, int_ip=args.tor_int_ip)
+			dicc['tor_is_tor_server'] = args.tor_info.isTorServer(aux_tor_check_val, int_ip=args.tor_int_ip)
 
 		if args.extra_data is not None:
 			for extra_fieldname in args.extra_data:
@@ -507,50 +549,53 @@ if __name__ == '__main__':
 		log.error('There were some errors in your cfg file.')
 		sys.exit(1)
 
-	if args.user is None:
-		es = Elasticsearch(args.node, timeout=args.timeout, port=args.port)
-	else:
-		es = Elasticsearch(args.node, timeout=args.timeout, port=args.port, http_auth=(args.user, args.password))
-	full_version = es.info()['version']['number']
-	es_version = int(full_version.split('.')[0])
-
-	if es_version == 1:
-		log.error('Elasticsearch version 1.x is not supported.')
-
-	log.info('Using elasticsearch version {}'.format(full_version))
-
-	translate_cfg_property = translate_cfg_property_2x if es_version == 2 else translate_cfg_property_std
-
 	index = cfg['meta']['index'] if args.index is None else args.index
 	doc_type = str(cfg['meta']['type']) if args.type is None else args.type
-	#create class from the cfg
-	#this class is used to initialize the mapping
-	DocClass = create_doc_class(cfg, doc_type, args)
-	#connection to elasticsearch
-	if args.user is None:
-		connections.create_connection(hosts=[args.node], timeout=args.timeout, port=args.port) #connection for api
-	else:
-		connections.create_connection(hosts=[args.node], timeout=args.timeout, port=args.port, http_auth=(args.user, args.password)) #connection for api
 
-	#delete before doing anything else
-	if args.delete:
-		log.warning('Deleting index {} whether it exists or not...'.format(index))
-		es.indices.delete(index=index, ignore=[400, 404])
+	if not args.test_processing_speed:
 
-	#initialize mapping
-	index_obj = Index(index, using=es)
-	if not index_obj.exists():
-		index_obj.settings(
-			number_of_replicas=args.replicas,
-			number_of_shards=args.shards,
-			refresh_interval=args.refresh_interval
-		)
-		if args.deflate_compression:
-			log.warn('Using deflate compression for index {}.'.format(index))
-			index_obj.__dict__['_settings']['index.codec']='best_compression'
-		index_obj.save()
+		if args.user is None:
+			es = Elasticsearch(args.node, timeout=args.timeout, port=args.port)
+		else:
+			es = Elasticsearch(args.node, timeout=args.timeout, port=args.port, http_auth=(args.user, args.password))
+		full_version = es.info()['version']['number']
+		es_version = int(full_version.split('.')[0])
 
-	DocClass.init(index=index, using=es)
+		if es_version == 1:
+			log.error('Elasticsearch version 1.x is not supported.')
+
+		log.info('Using elasticsearch version {}'.format(full_version))
+
+		translate_cfg_property = translate_cfg_property_2x if es_version == 2 else translate_cfg_property_std
+
+		#create class from the cfg
+		#this class is used to initialize the mapping
+		DocClass = create_doc_class(cfg, doc_type, args)
+		#connection to elasticsearch
+		if args.user is None:
+			connections.create_connection(hosts=[args.node], timeout=args.timeout, port=args.port) #connection for api
+		else:
+			connections.create_connection(hosts=[args.node], timeout=args.timeout, port=args.port, http_auth=(args.user, args.password)) #connection for api
+
+		#delete before doing anything else
+		if args.delete:
+			log.warning('Deleting index {} whether it exists or not...'.format(index))
+			es.indices.delete(index=index, ignore=[400, 404])
+
+		#initialize mapping
+		index_obj = Index(index, using=es)
+		if not index_obj.exists():
+			index_obj.settings(
+				number_of_replicas=args.replicas,
+				number_of_shards=args.shards,
+				refresh_interval=args.refresh_interval
+			)
+			if args.deflate_compression:
+				log.warn('Using deflate compression for index {}.'.format(index))
+				index_obj.__dict__['_settings']['index.codec']='best_compression'
+			index_obj.save()
+
+		DocClass.init(index=index, using=es)
 
 	#create the file iterator
 	try:
@@ -573,7 +618,6 @@ if __name__ == '__main__':
 		test_abs_ctr = 0
 		for d in documents:
 			test_abs_ctr+=1
-			print(d)
 		end = time.time()
 		elapsed = end - start
 		speed = test_abs_ctr/float(elapsed)
