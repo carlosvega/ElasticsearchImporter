@@ -1,27 +1,10 @@
-matrix:
-  include:
-    - os: linux
-      sudo: required
-      dist: xenial
-      language: python
-      install:
-        - pip install -r requirements.txt
-      python:
-        - "2.7"
-        - "3.6"
-        - "pypy2.7"
-      script:
-        - py.test -v
-    - os: linux
-      sudo: required
-      dist: trusty
-      language: python
-      install:
-        - pip install -r requirements.txt
-      python:
-        - "2.7"
-        - "3.6"
-        - "pypy2.7"
-      script:
-        - python check_fts5.py
-        - py.test -v
+language: python
+python:
+  - "2.7"
+  - "3.6"
+  - "pypy2.7"
+install:
+  - pip install -r requirements.txt
+script:
+  - python check_fts5.py
+  - py.test
