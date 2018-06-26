@@ -2,9 +2,10 @@ language: python
 python:
   - "2.7"
   - "3.6"
-  - "pypy2.7"
 install:
   - pip install -r requirements.txt
+before_script:
+  - bash install_sqlite_for_ubuntu.bash
 script:
   - python check_fts5.py
   - py.test
