@@ -1,4 +1,4 @@
-# Elasticsearch Importer
+# Elasticsearch Importer  [![Build Status](https://travis-ci.com/carlosvega/ElasticsearchImporter.svg?branch=master)](https://travis-ci.com/carlosvega/ElasticsearchImporter)
 Generic Elasticsearch Importer
 
 ## Installation
