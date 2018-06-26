@@ -1,11 +1,6 @@
-matrix:
-  include:
-    - os: linux
-      dist: xenial
-      sudo: required
-    - os: linux
-      dist: trusty
-      sudo: required
+dist:
+  - precise
+  - trusty
 language: python
 python:
   - "2.7"
