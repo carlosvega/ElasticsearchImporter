@@ -1,6 +1,7 @@
-dist:
-  - precise
-  - trusty
+matrix:
+  include:
+    - dist: precise
+    - dist: trusty
 language: python
 python:
   - "2.7"
