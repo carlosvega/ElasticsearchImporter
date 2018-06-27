@@ -132,3 +132,8 @@ In the [example.cfg](https://github.com/carlosvega/ElasticsearchImporter/blob/ma
 
 }
 ```
+
+## TODO Tasks
+
+- Add the gazeteer database from geonames
+- Autoupdate databases from ip2location and geonames
