@@ -288,10 +288,12 @@ class ZIPLevel_GeoDB(GeoDatabase_Base):
 			log_rss_memory_usage('Before populating FTS5 database.')
 			with gzip.open(self.original_db_path, 'rt') as odb:
 				query = odb.read()
+				log_rss_memory_usage('After reading sql database from file.')
 				self.cursor.execute(query)
 				self.conn.commit()
 				self.cursor.close()
 				self.conn.close()
+				log_rss_memory_usage('After closing FTS5 database.')
 				del query
 				gc.collect()
 				logging.info('Database {} created.'.format(self.db_path))
@@ -302,15 +304,38 @@ class ZIPLevel_GeoDB(GeoDatabase_Base):
 		return self.conn
 
 	def _get_geodata(self, column, value, multi_op='AND'):
-		if type(column) is str:
-			values = [value]
-		elif type(column) is list and type(value) is list:
-			values = value
+		'''Documentation regarding FTS search: https://www.sqlite.org/fts3.html#full_text_index_queries
+		A query such as:
+		zipdb.get_geodata(['place_name', 'admin_name1', 'country_code'], ['MADRID', 'MADRID', 'ES'])
+		should return something like:
+		{	'accuracy': 4.0,
+			'admin_code1': 'MD',
+			'admin_code2': 'M',
+			'admin_code3': '28079',
+			'admin_name1': 'MADRID',
+			'admin_name2': 'MADRID',
+			'admin_name3': 'MADRID',
+			'country_code': 'ES',
+			'country_name': None,
+			'location': '40.4165,-3.7026',
+			'place_name': 'MADRID',
+			'representative_point': '40.4165,-3.7026',
+			'zip_code': '28001'
+		}
+		'''
+		if type(value) is str and type(column) is str and column in self.names:
+			query = 'SELECT * FROM {} WHERE {} MATCH "{}:{}"'.format(self.name, self.name, column.lower(), value.lower())
+		elif type(value) is str and type(column) is str and column not in self.names:
+			query = 'SELECT * FROM {} WHERE {} MATCH "{}"'.format(self.name, self.name, value.lower())
+		elif type(column) is list and type(value) is list and len(column) == len(value):
+			op = ' {} '.format(multi_op)
+			query = op.join(["{}:{}".format(c.lower(), v.lower()) for c, v in zip(column, value)])
+			query = 'SELECT * FROM {} WHERE {} MATCH "{}"'.format(self.name, self.name, query)
+		else:
+			return None
 
-		op = ' {} '.format(multi_op)
-		query = op.join(values)
-		query = 'SELECT * FROM {} WHERE {} MATCH "{}"'.format(self.name, self.name, query)
 		self.cursor.execute(query)
+
 		results = self.cursor.fetchall()
 		if results is None or len(results) == 0:
 			return None
@@ -392,6 +417,8 @@ class ZIP_GeoIPDB(GeoDatabase_Base):
 			query = op.join(['"{}" = "{}"'.format(e[0], e[1]) for e in zip(column, value)])
 			query = 'SELECT * FROM {} WHERE {}'.format(self.name, query)
 			self.cursor.execute(query)
+		else:
+			return None
 		results = self.cursor.fetchall()
 		if results is None or len(results) == 0:
 			return None
@@ -409,9 +436,3 @@ class ZIP_GeoIPDB(GeoDatabase_Base):
 				del d[k]
 
 		return d
-
-# gdb0 = CountryLevel_GeoDB('db0', '/Users/carlosvega/ElasticsearchImporter/db/countries.csv', 'geodb0.db', update=False)
-# gdb9 = ZIP_GeoIPDB('db9', '/Users/carlosvega/ElasticsearchImporter/db/IP2LOCATION-LITE-DB9.CSV.gz', 'geodb9.db', update=False)
-
-# zipdb = ZIPLevel_GeoDB('test_zip_level.db', '/Users/carlosvega/ElasticsearchImporter/db/create_zip_db.sql.gz', update=False)
-
