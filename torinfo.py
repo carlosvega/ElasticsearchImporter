@@ -40,21 +40,21 @@ class TORinfo(object):
 		return s
 
 	def isTorServer(self, ip, int_ip=True):
-		if ip is None:
+		if ip is None or ip == '':
 			return False
 		if not int_ip:
 			ip = ip2int(ip)
 		return ip in self.tor_servers
 
 	def isExitNode(self, ip, int_ip=True):
-		if ip is None:
+		if ip is None or ip == '':
 			return False
 		if not int_ip:
 			ip = ip2int(ip)
 		return ip in self.tor_exit_nodes
 
 	def getTorInfo(self, ip, int_ip=True):
-		if ip is None:
+		if ip is None or ip == '':
 			return 'Invalid IP'
 		if not int_ip:
 			ip = ip2int(ip)
@@ -64,3 +64,6 @@ class TORinfo(object):
 			return 'TOR Server'
 		else:
 			return 'None'
+
+
+tinfo = TORinfo('db/Tor_ip_list_EXIT.csv', 'db/Tor_ip_list_ALL.csv')
