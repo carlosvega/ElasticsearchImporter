@@ -98,7 +98,7 @@ if command -v apt-get &> /dev/null ; then
 				exit
 			fi
 		fi
-	else:
+	else
 		echo "[ - sqlite3 with FTS5 support already installed ]"
 	fi
 	read -p "[ - The following process will delete python 2 and 3 and reinstall it to link the new sqlite3 installation. Continue (y/n)? ]" -n 1 -r
@@ -135,7 +135,7 @@ elif [[ "$OSTYPE" == "darwin"* ]]; then
     	then
 			echo "[ - Installing sqlite3 with FTS5 support from brew ]"
 			brew reinstall sqlite --with-fts5 --with-functions
-		else:
+		else
 			echo "[ - sqlite3 with FTS5 support already installed ]"
 		fi
 	else
