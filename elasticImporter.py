@@ -83,7 +83,7 @@ def parse_args():
 	parser.add_argument('--geo_int_ip', dest='geo_int_ip', default=False, help='Set if the provided IP addresses are integer numbers.')
 
 	#geo databases stuff
-	parser.add_argument('--regenerate_databases', dest='regenerate_databases', nargs = '*', required=False, default=[], help='Regenerate geo databases and exit. Specify the databases to regenerate: db9, db1, multilevel.')
+	parser.add_argument('--regenerate_databases', dest='regenerate_databases', nargs = '*', required=False, default=[], help='Regenerate geo databases and exit. Specify the databases to regenerate: db9, db0, multilevel.')
 
 	#stuff for TOR information
 	parser.add_argument('--tor-info-from', dest='tor_info_from', default=False, help='Column name containing IP addresses. Information will be added about the relation (if any) of the IP to the TOR network.')
@@ -109,11 +109,11 @@ def parse_args():
 	elif len(args.regenerate_databases) > 0:
 		path = get_script_path()
 		import geodb
-		if 'db1' in args.regenerate_databases:
-			fname = '{}/db/geodb1.db'.format(path)
+		if 'db0' in args.regenerate_databases:
+			fname = '{}/db/geodb0.db'.format(path)
 			if os.path.isfile(fname):
 				os.remove(fname)
-			geodb.CountryLevel_GeoDB('db1', '{}/db/countries.csv'.format(path), fname, update=True)
+			geodb.CountryLevel_GeoDB('db0', '{}/db/countries.csv'.format(path), fname, update=True)
 		if 'multilevel' in args.regenerate_databases:
 			fname = '{}/db/multilevel.db'.format(path)
 			if os.path.isfile(fname):
@@ -265,7 +265,7 @@ def load_geo_database(level):
 		path = get_script_path()
 		log_rss_memory_usage('Before loading geo module.')
 		from geodb import CountryLevel_GeoDB
-		return CountryLevel_GeoDB('db1', '{}/db/countries.csv'.format(path), '{}/db/geodb1.db'.format(path), update=False)
+		return CountryLevel_GeoDB('db0', '{}/db/countries.csv'.format(path), '{}/db/geodb0.db'.format(path), update=False)
 	elif level == 'multilevel':
 		path = get_script_path()
 		log_rss_memory_usage('Before loading geo module.')
