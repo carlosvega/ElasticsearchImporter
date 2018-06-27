@@ -196,7 +196,7 @@ class CountryLevel_GeoDB(GeoDatabase_Base):
 		if 'types' not in kwargs:
 			kwargs['types'] = CountryLevel_GeoDB.types
 		super(CountryLevel_GeoDB, self).__init__(*args, **kwargs)
-		logging.debug('CountryLevel_GeoDB DB0 loaded.')
+		logging.debug('CountryLevel_GeoDB DB1 loaded.')
 
 	def _get_geodata(self, column, value, multi_op='AND'):
 		"""Queries the database.
