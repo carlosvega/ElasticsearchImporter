@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import sys, os, py, pytest
+import pandas as pd
 myPath = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, myPath + '/../')
 
@@ -11,8 +12,7 @@ else:
 	long = int
 
 from geodb import *
-
-
+from torinfo import *
 
 #SYS STUFF
 @pytest.fixture(scope = 'session')
@@ -33,15 +33,40 @@ def bad_sample_ips():
 	masks= ['192.168.2.0/24', '83.112.12.0/24', '172.14.12.0/24', '65.43.115.0/24']
 	return zip(ips,ints,masks[::-1])
 
-# GEO DB
-
 @pytest.fixture(scope='session')
 def sessiondir(request):
-		"""Temporal session directory"""
-		d = py.path.local.mkdtemp()
-		request.addfinalizer(lambda: d.remove(rec=1)) #execute after finishing tests
+	"""Temporal session directory"""
+	d = py.path.local.mkdtemp()
+	request.addfinalizer(lambda: d.remove(rec=1)) #execute after finishing tests
 
-		return d
+	return d
+
+
+#TOR
+
+@pytest.fixture(scope='session')
+def torinfo_db(sessiondir, script_path):
+	db = sessiondir.join('db')
+	if not db.exists():
+		db.mkdir()
+	path = str(sessiondir)
+	return TORinfo('{}/db/Tor_ip_list_EXIT.csv'.format(script_path), '{}/db/Tor_ip_list_ALL.csv'.format(script_path))
+
+@pytest.fixture(scope='session')
+def tor_exit_nodes(sessiondir, script_path):
+	df = pd.read_csv('{}/db/Tor_query_EXPORT.csv'.format(script_path))
+	exit_nodes = df['Flag - Exit'] == 1
+	return df[exit_nodes][u'IP Address'].tolist()
+
+@pytest.fixture(scope='session')
+def tor_non_exit_nodes(sessiondir, script_path):
+	df = pd.read_csv('{}/db/Tor_query_EXPORT.csv'.format(script_path))
+	non_exit_nodes = df['Flag - Exit'] == 0
+	return df[non_exit_nodes][u'IP Address'].tolist()
+
+
+# GEO DB
+
 
 @pytest.fixture(scope='session')
 def country_level_db(sessiondir, script_path):
