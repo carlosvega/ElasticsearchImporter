@@ -10,3 +10,7 @@ before_script:
 script:
   - python check_fts5.py
   - py.test
+notifications:
+  email:
+    on_success: never # default: change
+    on_failure: always # default: always
