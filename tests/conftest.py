@@ -52,6 +52,14 @@ def country_level_db(sessiondir, script_path):
 	return CountryLevel_GeoDB('db0', '{}/db/countries.csv'.format(script_path), '{}/db/geodb0.db'.format(path), update=False)
 
 @pytest.fixture(scope='session')
+def multilevel_db(sessiondir, script_path):
+	db = sessiondir.join('db')
+	if not db.exists():
+		db.mkdir()
+	path = str(sessiondir)
+	return ZIPLevel_GeoDB('geoinfo', '{}/db/create_zip_db.sql.gz'.format(script_path), '{}/db/multilevel.db'.format(path), update=False)
+
+@pytest.fixture(scope='session')
 def ip_level_db(sessiondir, script_path):
 	db = sessiondir.join('db')
 	if not db.exists():
