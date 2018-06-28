@@ -64,6 +64,3 @@ class TORinfo(object):
 			return 'TOR Server'
 		else:
 			return 'None'
-
-
-tinfo = TORinfo('db/Tor_ip_list_EXIT.csv', 'db/Tor_ip_list_ALL.csv')
