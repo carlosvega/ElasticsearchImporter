@@ -175,7 +175,8 @@ def parse_args():
 	if args.tor_info_from != False:
 		logging.info('Loading TORinfo module.')
 		from torinfo import TORinfo
-		args.tor_info = TORinfo('db/Tor_ip_list_EXIT.csv', 'db/Tor_ip_list_ALL.csv')
+		path = get_script_path()
+		args.tor_info = TORinfo('{}/db/Tor_ip_list_EXIT.csv'.format(path), '{}/db/Tor_ip_list_ALL.csv'.format(path))
 
 	args.date_fields = []
 
