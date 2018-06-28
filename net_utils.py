@@ -1,4 +1,4 @@
-import socket, struct
+import socket, struct, six
 
 def in_net(ipint, net):
 	#ipaddr = socket.inet_aton(ip)
@@ -16,10 +16,10 @@ def ip2int(ip):
 	"""Convert an IP in dot-decimal notation to int.
 	:param ip: string.
 	"""
-	if not isinstance(ip, str) and not isinstance(ip, unicode):
+	if not isinstance(ip, six.string_types):
 		raise ValueError("ip must be str and is {0} instead".format(type(ip)))
-	if isinstance(ip, unicode):
-		ip = str(ip)
+
+	ip = str(ip)
 	packedIP = socket.inet_aton(ip)
 	return struct.unpack("!I", packedIP)[0]
 

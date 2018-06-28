@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from net_utils import *
-import logging, sys
+import logging, sys, traceback
 
 class TORinfo(object):
 	"""A class to get information from an IP
