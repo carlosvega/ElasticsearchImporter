@@ -16,8 +16,10 @@ def ip2int(ip):
 	"""Convert an IP in dot-decimal notation to int.
 	:param ip: string.
 	"""
-	if not isinstance(ip, str):
-			raise ValueError("ip must be str and is {0} instead".format(type(ip)))
+	if not isinstance(ip, str) and not isinstance(ip, unicode):
+		raise ValueError("ip must be str and is {0} instead".format(type(ip)))
+	if isinstance(ip, unicode):
+		ip = str(ip)
 	packedIP = socket.inet_aton(ip)
 	return struct.unpack("!I", packedIP)[0]
 
