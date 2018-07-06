@@ -77,7 +77,7 @@ class GeoDatabase_Base(object):
 		cursor = self.conn.cursor()
 		for column in columns:
 			if column in self.indices:
-				logging.info('The index {} already exists.'.format(column))
+				logging.info('The sqlite geo-database index {} already exists.'.format(column))
 			else:
 				logging.info('Creating Index {} for column {}'.format(column, column))
 				cursor.execute('CREATE INDEX {} ON {}({})'.format(column, self.name, column))
