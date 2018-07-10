@@ -16,7 +16,7 @@ from threading import Thread, Event
 from debug_utils import log_rss_memory_usage
 
 log = logging.getLogger(__name__)
-logging.basicConfig(format="[ %(asctime)s %(levelname)s %(threadName)s ] " + "%(message)s", level=logging.INFO)
+logging.basicConfig(format="[ %(asctime)s %(levelname)s %(process)s ] " + "%(message)s", level=logging.INFO)
 args = None
 translate_cfg_property = None
 es_version = None
