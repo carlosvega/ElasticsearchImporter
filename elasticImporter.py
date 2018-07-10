@@ -532,7 +532,11 @@ if __name__ == '__main__':
 			sys.setdefaultencoding('utf8')
 
 	#load cfg file
-	cfg = json.load(open(args.cfg))
+	try:
+		cfg = json.load(open(args.cfg))
+	except ValueError as e:
+		logging.error("Invalid JSON format. Please, check the format (commas, lists etc.) Message was: {}".format(str(e)))
+		sys.exit(1)
 
 	pid = os.getpid()
 	def signal_handler(signal, frame):
