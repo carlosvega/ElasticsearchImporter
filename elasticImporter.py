@@ -535,7 +535,7 @@ if __name__ == '__main__':
 	try:
 		cfg = json.load(open(args.cfg))
 	except ValueError as e:
-		logging.error("Invalid JSON format. Please, check the format (commas, lists etc.) Message was: {}".format(str(e)))
+		log.error("Invalid JSON format. Please, check the format (commas, lists etc.) Message was: {}".format(str(e)))
 		sys.exit(1)
 
 	pid = os.getpid()
