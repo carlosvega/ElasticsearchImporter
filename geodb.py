@@ -6,7 +6,7 @@ from shapely.geometry import MultiPoint
 from argparse import RawTextHelpFormatter
 from shapely.geometry import MultiPoint
 from net_utils import *
-from debug_utils import log_rss_memory_usage
+from debug_utils import log_rss_memory_usage, get_script_path
 
 class GeoDatabase_Base(object):
 	"""A base class with common methods.
@@ -393,8 +393,19 @@ class ZIP_GeoIPDB(GeoDatabase_Base):
 		if 'compression' not in kwargs:
 			kwargs['compression'] = 'gzip'
 		super(ZIP_GeoIPDB, self).__init__(*args, **kwargs)
-		logging.debug('ZIP_GeoIPDB DB9 loaded.')
+		self.db_folder = kwargs.get('db_folder', '{}/db/'.format(get_script_path()))
+		self.ip_int_to_list = self._load_cache_ip_file()
+		self.geolog.debug('ZIP_GeoIPDB DB9 loaded.')
 
+	def _load_cache_ip_file(self):
+		#LOADING DATABASE FROM FILE
+		cache_filename = '{}/ip_int_to_list.npy'.format(self.db_folder)
+		if os.path.exists(cache_filename):
+			return np.load(cache_filename)
+		self.geolog.info('Creating cache IP_to file')
+		df = pd.read_csv(self.original_db_path, sep=self.separator, names=self.names, usecols=["ip_to"], dtype=self.types, compression=self.compression, keep_default_na=False, na_values=['-1.#IND', '1.#QNAN', '1.#IND', '-1.#QNAN', '#N/A N/A', '#N/A', 'N/A', 'n/a', '#NA', 'NULL', 'null', 'NaN', '-NaN', 'nan', '-nan', ''], encoding='utf-8')
+		np.save(cache_filename, df['ip_to'].values)
+		return df['ip_to'].values
 
 	def _get_geodata(self, column, value, multi_op='AND', str_ip=True):
 		"""Queries the database.
@@ -413,28 +424,40 @@ class ZIP_GeoIPDB(GeoDatabase_Base):
 		"""
 		if column == 'ip':
 			if str_ip:
-				value = ip2int(str(value))
-			self.cursor.execute('SELECT * FROM {} WHERE {} BETWEEN ip_from AND ip_to'.format(self.name, value))
+				try:
+					value = ip2int(str(value))
+				except Exception as e:
+					self.geolog.warning('Error in ip2int with ip: |{}|'.format(str(value)))
+					return None
+			idx = np.searchsorted(self.ip_int_to_list, value, side='right')
+			ip_to = self.ip_int_to_list[idx]
+			query = 'SELECT * FROM {} WHERE ip_to = "{}"'.format(self.name, ip_to)
+			#query = 'SELECT * FROM {} WHERE {} BETWEEN ip_from AND ip_to'.format(self.name, value)
 		elif type(column) is str:
-			self.cursor.execute('SELECT * FROM {} WHERE {} = "{}"'.format(self.name, column, value))
+			query = 'SELECT * FROM {} WHERE {} = "{}"'.format(self.name, column, value)
 		elif type(column) is list and type(value) is list and len(column) == len(value):
 			op = ' {} '.format(multi_op)
 			query = op.join(['"{}" = "{}"'.format(e[0], e[1]) for e in zip(column, value)])
 			query = 'SELECT * FROM {} WHERE {}'.format(self.name, query)
-			self.cursor.execute(query)
 		else:
 			return None
+		self.geolog.debug('Query: {}'.format(query))
+
+		self.cursor.execute(query)
 		results = self.cursor.fetchall()
+		self.geolog.debug('Results {}'.format(results))
 		if results is None or len(results) == 0:
 			return None
 		d = results[0]
 		d['location'] = '{},{}'.format(results[0]['latitude'], results[0]['longitude'])
 		d['representative_point'] = d['location']
 		if len(results) > 1:
+			self.geolog.debug('More than 1 result. Creating centroid.')
 			geo_points = [(r['latitude'], r['longitude']) for r in results]
 			geo_points = MultiPoint(geo_points)
 			repr_lat, repr_lon = geo_points.representative_point().coords[0]
 			d['representative_point'] = '{},{}'.format(repr_lat, repr_lon)
+			self.geolog.debug('Centroid done.')
 
 		for k in ['latitude', 'longitude', 'ip_from', 'ip_to', 'index']:
 			if k in d:
