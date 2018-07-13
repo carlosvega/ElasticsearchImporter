@@ -90,4 +90,4 @@ def ip_level_db(sessiondir, script_path):
 	if not db.exists():
 		db.mkdir()
 	path = str(sessiondir)
-	return ZIP_GeoIPDB('db9', '{}/db/IP2LOCATION-LITE-DB9.CSV.gz'.format(script_path), '{}/db/geodb9.db'.format(path), update=False)
+	return ZIP_GeoIPDB('db9', '{}/db/IP2LOCATION-LITE-DB9.CSV.gz'.format(script_path), '{}/db/geodb9.db'.format(path), update=False, db_folder=path)
