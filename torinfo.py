@@ -43,33 +43,21 @@ class TORinfo(object):
 		if ip is None or ip == '':
 			return False
 		if not int_ip:
-			try:
-				ip = ip2int(ip)
-			except Exception as e:
-				logging.debug('TORINFO.isTorServer: Invalid IP {}'.format(ip))
-				return False
+			ip = ip2int(ip)
 		return ip in self.tor_servers
 
 	def isExitNode(self, ip, int_ip=True):
 		if ip is None or ip == '':
 			return False
 		if not int_ip:
-			try:
-				ip = ip2int(ip)
-			except Exception as e:
-				logging.debug('TORINFO.isExitNode: Invalid IP {}'.format(ip))
-				return False
+			ip = ip2int(ip)
 		return ip in self.tor_exit_nodes
 
 	def getTorInfo(self, ip, int_ip=True):
 		if ip is None or ip == '':
 			return 'Invalid IP'
 		if not int_ip:
-			try:
-				ip = ip2int(ip)
-			except Exception as e:
-				logging.warning('TORINFO.getTorInfo: Invalid IP {}'.format(ip))
-				return 'Invalid IP'
+			ip = ip2int(ip)
 		if self.isExitNode(ip):
 			return 'TOR Exit Node'
 		elif self.isTorServer(ip):
