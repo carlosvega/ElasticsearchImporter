@@ -434,9 +434,13 @@ def typed_iterator(cfg, index, doc_type, args, f):
 			#tor_stuff
 			if args.tor_info is not None:
 				aux_tor_check_val = dicc.get(args.tor_info_from, None)
-				dicc['tor_info'] = args.tor_info.getTorInfo(aux_tor_check_val, int_ip=args.tor_int_ip)
-				dicc['tor_is_exit_node'] = args.tor_info.isExitNode(aux_tor_check_val, int_ip=args.tor_int_ip)
-				dicc['tor_is_tor_server'] = args.tor_info.isTorServer(aux_tor_check_val, int_ip=args.tor_int_ip)
+				try:
+					dicc['tor_info'] = args.tor_info.getTorInfo(aux_tor_check_val, int_ip=args.tor_int_ip)
+					dicc['tor_is_exit_node'] = args.tor_info.isExitNode(aux_tor_check_val, int_ip=args.tor_int_ip)
+					dicc['tor_is_tor_server'] = args.tor_info.isTorServer(aux_tor_check_val, int_ip=args.tor_int_ip)
+				except Exception as e:
+					log.warning('Exception in tor_info module. Might be an invalid IP: |{}| Details: {}'.format(aux_tor_check_val, str(e)))
+					dicc['tor_info'] = 'Invalid IP'
 
 			if args.extra_data is not None:
 				for extra_fieldname in args.extra_data:
@@ -475,9 +479,13 @@ def input_generator(cfg, index, doc_type, args, f):
 		#tor_stuff
 		if args.tor_info is not None:
 			aux_tor_check_val = dicc.get(args.tor_info_from, None)
-			dicc['tor_info'] = args.tor_info.getTorInfo(aux_tor_check_val, int_ip=args.tor_int_ip)
-			dicc['tor_is_exit_node'] = args.tor_info.isExitNode(aux_tor_check_val, int_ip=args.tor_int_ip)
-			dicc['tor_is_tor_server'] = args.tor_info.isTorServer(aux_tor_check_val, int_ip=args.tor_int_ip)
+			try:
+				dicc['tor_info'] = args.tor_info.getTorInfo(aux_tor_check_val, int_ip=args.tor_int_ip)
+				dicc['tor_is_exit_node'] = args.tor_info.isExitNode(aux_tor_check_val, int_ip=args.tor_int_ip)
+				dicc['tor_is_tor_server'] = args.tor_info.isTorServer(aux_tor_check_val, int_ip=args.tor_int_ip)
+			except Exception as e:
+				log.warning('Exception in tor_info module. Might be an invalid IP: |{}| Details: {}'.format(aux_tor_check_val, str(e)))
+				dicc['tor_info'] = 'Invalid IP'
 		if args.extra_data is not None:
 			for extra_fieldname in args.extra_data:
 				dicc[extra_fieldname] = args.extra_data[extra_fieldname]
