@@ -13,7 +13,7 @@ class GeoDatabase_Base(object):
 	Child classes should implement _get_geodata
 	"""
 
-	def __init__(self, name, original_db_path, db_path, names=[], types={}, separator=',', index_columns=[], update=False, compression='infer'):
+	def __init__(self, name, original_db_path, db_path, names=[], types={}, separator=',', index_columns=[], update=False, compression='infer', debug=False):
 		"""Creates a GeoDatabase_Base object
 
 		:param str name: Name of the table in the database.
@@ -27,6 +27,11 @@ class GeoDatabase_Base(object):
 		:param compression: If the csv file is compressed specify the kind of compression. {'infer', 'gzip', 'bz2', 'zip', 'xz', None} See https://pandas.pydata.org/pandas-docs/stable/generated/pandas.read_csv.html.
 		:return: A GeoDatabase_Base object.
 		"""
+		self.geolog = logging.getLogger(__name__)
+		if not debug:
+			self.geolog.setLevel(level=logging.INFO)
+		else:
+			self.geolog.setLevel(level=logging.DEBUG)
 		self.name = name
 		self.original_db_path = original_db_path
 		self.db_path = db_path
@@ -65,7 +70,7 @@ class GeoDatabase_Base(object):
 		cursor = self.conn.cursor()
 		cursor.execute("SELECT name FROM sqlite_master WHERE type == 'index'")
 		self.indices = [index[0] for index in cursor.fetchall()]
-		logging.debug('INDICES: {}'.format(self.indices))
+		self.geolog.debug('INDICES: {}'.format(self.indices))
 		cursor.close()
 		return self.indices
 
@@ -77,9 +82,9 @@ class GeoDatabase_Base(object):
 		cursor = self.conn.cursor()
 		for column in columns:
 			if column in self.indices:
-				logging.info('The sqlite geo-database index {} already exists.'.format(column))
+				self.geolog.info('The sqlite geo-database index {} already exists.'.format(column))
 			else:
-				logging.info('Creating Index {} for column {}'.format(column, column))
+				self.geolog.info('Creating Index {} for column {}'.format(column, column))
 				cursor.execute('CREATE INDEX {} ON {}({})'.format(column, self.name, column))
 		cursor.close()
 
@@ -115,7 +120,7 @@ class GeoDatabase_Base(object):
 			del df
 			gc.collect()
 			log_rss_memory_usage('After creating sql database.')
-			logging.info('Database {} created.'.format(self.db_path))
+			self.geolog.info('Database {} created.'.format(self.db_path))
 		else:
 			self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
 		self._get_indices()
@@ -196,7 +201,7 @@ class CountryLevel_GeoDB(GeoDatabase_Base):
 		if 'types' not in kwargs:
 			kwargs['types'] = CountryLevel_GeoDB.types
 		super(CountryLevel_GeoDB, self).__init__(*args, **kwargs)
-		logging.debug('CountryLevel_GeoDB DB0 loaded.')
+		self.geolog.debug('CountryLevel_GeoDB DB0 loaded.')
 
 	def _get_geodata(self, column, value, multi_op='AND'):
 		"""Queries the database.
@@ -243,7 +248,7 @@ class ZIPLevel_GeoDB(GeoDatabase_Base):
 	names = ['country_code', 'zip_code', 'place_name', 'admin_name1', 'admin_code1', 'admin_name2', 'admin_code2', 'admin_name3', 'admin_code3', 'latitude', 'longitude', 'accuracy']
 	types = {'country_code': str, 'zip_code': str, 'place_name': str, 'admin_name1': str, 'admin_code1': str, 'admin_name2': str, 'admin_code2': str, 'admin_name3': str, 'admin_code3': str, 'latitude': float, 'longitude': float, 'accuracy': float }
 	indices = []
-	def __init__(self, name, original_db_path, db_path, names=[], types=[], index_columns=[], update=False):
+	def __init__(self, name, original_db_path, db_path, names=[], types=[], index_columns=[], update=False, debug=False):
 		if len(names) == 0:
 			names = ZIPLevel_GeoDB.names
 		if len(types) == 0:
@@ -253,8 +258,8 @@ class ZIPLevel_GeoDB(GeoDatabase_Base):
 		if not ZIPLevel_GeoDB.check_FTS5_support():
 			logging.error('FTS5 extension not available in your sqlite3 installation. py-sqlite3 version: {}. sqlite3 version: {}. Please, recompile or reinstall sqlite3 modules with FTS5 support.'.format(sqlite3.version, sqlite3.sqlite_version))
 			sys.exit(1)
-		super(ZIPLevel_GeoDB, self).__init__(name, original_db_path, db_path, names=names, types=types, index_columns=index_columns, update=update)
-		logging.debug('ZIPLevel_GeoDB loaded.')
+		super(ZIPLevel_GeoDB, self).__init__(name, original_db_path, db_path, names=names, types=types, index_columns=index_columns, update=update, debug=debug)
+		self.geolog.debug('ZIPLevel_GeoDB loaded.')
 
 	@classmethod
 	def check_FTS5_support(cls):
@@ -296,7 +301,7 @@ class ZIPLevel_GeoDB(GeoDatabase_Base):
 				log_rss_memory_usage('After closing FTS5 database.')
 				del query
 				gc.collect()
-				logging.info('Database {} created.'.format(self.db_path))
+				self.geolog.info('Database {} created.'.format(self.db_path))
 			log_rss_memory_usage('After populating FTS5 database.')
 		self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
 		self.conn.row_factory = self._dict_factory

@@ -113,20 +113,20 @@ def parse_args():
 			fname = '{}/db/geodb0.db'.format(path)
 			if os.path.isfile(fname):
 				os.remove(fname)
-			geodb.CountryLevel_GeoDB('db0', '{}/db/countries.csv'.format(path), fname, update=True)
+			geodb.CountryLevel_GeoDB('db0', '{}/db/countries.csv'.format(path), fname, update=True, debug=args.debug)
 		if 'multilevel' in args.regenerate_databases:
 			fname = '{}/db/multilevel.db'.format(path)
 			if os.path.isfile(fname):
 				os.remove(fname)
 			log.info('FTS5 Support: {}'.format(geodb.ZIPLevel_GeoDB.check_FTS5_support()))
-			geodb.ZIPLevel_GeoDB('geoinfo', '{}/db/create_zip_db.sql.gz'.format(path), '{}/db/multilevel.db'.format(path), update=True)
+			geodb.ZIPLevel_GeoDB('geoinfo', '{}/db/create_zip_db.sql.gz'.format(path), '{}/db/multilevel.db'.format(path), update=True, debug=args.debug)
 			#geodb.ZIPLevel_GeoDB('{}/db/multilevel.db'.format(path), '{}/db/create_zip_db.sql.gz'.format(path), update=True)
 		if 'db9' in args.regenerate_databases:
 			fname = '{}/db/geodb9.db'.format(path)
 			if os.path.isfile(fname):
 				os.remove(fname)
 			fname = '{}/db/geodb9.db'.format(path)
-			geodb.ZIP_GeoIPDB('db9', '{}/db/IP2LOCATION-LITE-DB9.CSV.gz'.format(path), fname, update=True)
+			geodb.ZIP_GeoIPDB('db9', '{}/db/IP2LOCATION-LITE-DB9.CSV.gz'.format(path), fname, update=True, debug=args.debug)
 		sys.exit(1)
 
 	if args.extra_data is not None:
@@ -166,7 +166,7 @@ def parse_args():
 		log.error('Please provide the --geo_column options')
 		sys.exit(-1)
 
-	args.geodb = load_geo_database(args.geo_precission)
+	args.geodb = load_geo_database(args.geo_precission, args.debug)
 	if args.geodb is not None:
 		log_rss_memory_usage('After loading geo module.')
 		log.info('Geo-module loaded.')
@@ -261,23 +261,23 @@ def get_geodata_field(level):
 
 	return extra_geo_fields
 
-def load_geo_database(level):
+def load_geo_database(level, debug):
 	if level == 'country_level':
 		path = get_script_path()
 		log_rss_memory_usage('Before loading geo module.')
 		from geodb import CountryLevel_GeoDB
-		return CountryLevel_GeoDB('db0', '{}/db/countries.csv'.format(path), '{}/db/geodb0.db'.format(path), update=False)
+		return CountryLevel_GeoDB('db0', '{}/db/countries.csv'.format(path), '{}/db/geodb0.db'.format(path), update=False, debug=debug)
 	elif level == 'multilevel':
 		path = get_script_path()
 		log_rss_memory_usage('Before loading geo module.')
 		from geodb import ZIPLevel_GeoDB
 		log.info('FTS5 Support: {}'.format(ZIPLevel_GeoDB.check_FTS5_support()))
-		return ZIPLevel_GeoDB('{}/db/multilevel.db'.format(path), '{}/db/create_zip_db.sql.gz'.format(path), update=False)
+		return ZIPLevel_GeoDB('{}/db/multilevel.db'.format(path), '{}/db/create_zip_db.sql.gz'.format(path), update=False, debug=debug)
 	elif level == 'ip':
 		path = get_script_path()
 		log_rss_memory_usage('Before loading geo module.')
 		from geodb import ZIP_GeoIPDB
-		return ZIP_GeoIPDB('db9', '{}/db/IP2LOCATION-LITE-DB9.CSV.gz'.format(path), '{}/db/geodb9.db'.format(path), update=False)
+		return ZIP_GeoIPDB('db9', '{}/db/IP2LOCATION-LITE-DB9.CSV.gz'.format(path), '{}/db/geodb9.db'.format(path), update=False, debug=debug)
 	return None
 
 #END OF GEO LOCATION STUFF
@@ -472,14 +472,12 @@ def input_generator(cfg, index, doc_type, args, f):
 		#geo_stuff
 		if args.geo_precission is not None:
 			dicc = geo_append(dicc, args)
-
 		#tor_stuff
 		if args.tor_info is not None:
 			aux_tor_check_val = dicc.get(args.tor_info_from, None)
 			dicc['tor_info'] = args.tor_info.getTorInfo(aux_tor_check_val, int_ip=args.tor_int_ip)
 			dicc['tor_is_exit_node'] = args.tor_info.isExitNode(aux_tor_check_val, int_ip=args.tor_int_ip)
 			dicc['tor_is_tor_server'] = args.tor_info.isTorServer(aux_tor_check_val, int_ip=args.tor_int_ip)
-
 		if args.extra_data is not None:
 			for extra_fieldname in args.extra_data:
 				dicc[extra_fieldname] = args.extra_data[extra_fieldname]
@@ -488,14 +486,11 @@ def input_generator(cfg, index, doc_type, args, f):
 			for date_field in args.date_fields:
 				if date_field in dicc:
 					dicc[date_field] = dicc[date_field]+'000'
-
 		a = {'_source' : dicc, '_index'  : index, '_type'   : doc_type}
-
 		if args.md5_id:
 			a['_id'] = md5_calc(dicc, cfg['order_in_file'], args)
 
 		a['_source'] = json.dumps(a['_source'])
-
 		yield a
 
 def dummy_iterator(n=100000):
@@ -533,6 +528,7 @@ if __name__ == '__main__':
 
 	#load cfg file
 	try:
+		log.debug('Loading cfg file {}'.format(args.cfg))
 		cfg = json.load(open(args.cfg))
 	except ValueError as e:
 		log.error("Invalid JSON format. Please, check the format (commas, lists etc.) Message was: {}".format(str(e)))
@@ -543,6 +539,7 @@ if __name__ == '__main__':
 			log.error('You pressed Ctrl+C! Aborting execution.')
 			os.kill(pid, 9)
 
+	log.debug('Registering signal handler')
 	signal.signal(signal.SIGINT, signal_handler)
 
 	cfg_errors = False
@@ -559,6 +556,7 @@ if __name__ == '__main__':
 
 	if not args.test_processing_speed:
 
+		log.debug('Trying Elasticsearch Connection')
 		if args.user is None:
 			es = Elasticsearch(args.node, timeout=args.timeout, port=args.port)
 		else:
@@ -575,6 +573,7 @@ if __name__ == '__main__':
 
 		#create class from the cfg
 		#this class is used to initialize the mapping
+		log.debug('Creating doc class')
 		DocClass = create_doc_class(cfg, doc_type, args)
 		#connection to elasticsearch
 		if args.user is None:
@@ -605,6 +604,7 @@ if __name__ == '__main__':
 	#create the file iterator
 	try:
 		if args.input != '-':
+			log.debug('Opening file {}'.format(args.input))
 			f = codecs.open(args.input, buffering=1, encoding='utf-8', errors='ignore')
 		else:
 			f = sys.stdin
@@ -619,10 +619,14 @@ if __name__ == '__main__':
 		documents = input_generator(cfg, index, doc_type, args, f)
 
 	if args.test_processing_speed:
+		log.debug('Test processing speed')
 		start = time.time()
 		test_abs_ctr = 0
 		for d in documents:
 			test_abs_ctr+=1
+			if test_abs_ctr%1000 == 0:
+				log.debug('Processed: {}'.format(test_abs_ctr))
+		log.debug('Processed: {}'.format(test_abs_ctr))
 		end = time.time()
 		elapsed = end - start
 		speed = test_abs_ctr/float(elapsed)
@@ -638,6 +642,7 @@ if __name__ == '__main__':
 		progress_thread = Thread( target=progress_t, args=("ProgressT", progress_t_stop) )
 		progress_thread.start()
 	index_failed = 0; index_success = 0; abs_ctr=0; index_relative_ctr=0
+	log.debug('Iterating documents')
 	for ok, item in ret:
 		abs_ctr+=1
 		index_relative_ctr+=1
