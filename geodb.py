@@ -392,14 +392,14 @@ class ZIP_GeoIPDB(GeoDatabase_Base):
 			kwargs['types'] = ZIP_GeoIPDB.types
 		if 'compression' not in kwargs:
 			kwargs['compression'] = 'gzip'
+		self.db_folder = kwargs.pop('db_folder', os.path.join(get_script_path(), 'db'))
 		super(ZIP_GeoIPDB, self).__init__(*args, **kwargs)
-		self.db_folder = kwargs.get('db_folder', '{}/db/'.format(get_script_path()))
 		self.ip_int_to_list = self._load_cache_ip_file()
 		self.geolog.debug('ZIP_GeoIPDB DB9 loaded.')
 
 	def _load_cache_ip_file(self):
 		#LOADING DATABASE FROM FILE
-		cache_filename = '{}/ip_int_to_list.npy'.format(self.db_folder)
+		cache_filename = os.path.join(self.db_folder, 'ip_int_to_list.npy')
 		if os.path.exists(cache_filename):
 			return np.load(cache_filename)
 		self.geolog.info('Creating cache IP_to file')
