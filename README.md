@@ -135,6 +135,8 @@ In the [example.cfg](https://github.com/carlosvega/ElasticsearchImporter/blob/ma
 
 ## TODO Tasks
 
+- Add an option to include a timestamp on the documents
+- Add an option to exclude columns
 - Add the gazeteer database from geonames
 - Autoupdate databases from ip2location and geonames
 - Improve docs
