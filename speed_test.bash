@@ -45,7 +45,7 @@ test_base=$(mktemp)
 test_py2=$(mktemp)
 test_py3=$(mktemp)
 test_pypy=$(mktemp)
-lines=10000000
+lines=1000000
 #Base
 generate_lines $lines > $lines_file
 #Python 2
