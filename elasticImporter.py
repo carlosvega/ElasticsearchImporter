@@ -20,6 +20,7 @@ logging.basicConfig(format="[ %(asctime)s %(levelname)s %(process)s ] " + "%(mes
 args = None
 translate_cfg_property = None
 es_version = None
+geo = None
 
 if es_dsl_version >= (6, 0, 0):
 	#no string object
@@ -173,7 +174,7 @@ def parse_args():
 
 	args.tor_info = None
 	if args.tor_info_from != False:
-		logging.info('Loading TORinfo module.')
+		log.info('Loading TORinfo module.')
 		from torinfo import TORinfo
 		path = get_script_path()
 		args.tor_info = TORinfo('{}/db/Tor_ip_list_EXIT.csv'.format(path), '{}/db/Tor_ip_list_ALL.csv'.format(path))
@@ -510,16 +511,16 @@ def progress_t(threadname, stop_event):
     global start_indexing, index_success, index_failed, index_relative_ctr, failed_items
     prev_value = 0
     while(not stop_event.is_set()):
-            stop_event.wait(2)
-            temp_abs_ctr = index_success+index_failed
-            if prev_value != temp_abs_ctr:
-                    index_relative_ctr = 0
-                    prev_value = temp_abs_ctr
-                    lap_elapsed = time.time() - start_indexing
-                    lap_speed = temp_abs_ctr/float(lap_elapsed)
-                    log.info('Success: {}, Failed: {}. Elapsed: {:.4f} (sec.). Speed: {:.4f} (reg/s)'.format(index_success, index_failed, lap_elapsed, lap_speed))
-                    if index_failed:
-                    	log.debug('Failed lines: {}'.format(failed_items))
+        stop_event.wait(2)
+        temp_abs_ctr = index_success+index_failed
+        if prev_value != temp_abs_ctr:
+            index_relative_ctr = 0
+            prev_value = temp_abs_ctr
+            lap_elapsed = time.time() - start_indexing
+            lap_speed = temp_abs_ctr/float(lap_elapsed)
+            log.info('Success: {}, Failed: {}. Elapsed: {:.4f} (sec.). Speed: {:.4f} (reg/s)'.format(index_success, index_failed, lap_elapsed, lap_speed))
+            if index_failed:
+            	log.debug('Failed lines: {}'.format(failed_items))
 
 if __name__ == '__main__':
 	#GLOBAL VARIABLES FOR progress_t

@@ -1,12 +1,19 @@
 # -*- coding: utf-8 -*-
 import pandas as pd
-import sqlite3, argparse, os, logging, os.path, gzip, sys, gc
+import sqlite3, argparse, os, logging, os.path, gzip, sys, gc, bisect
+try:
+    from StringIO import StringIO
+except ImportError:
+    from io import StringIO
 import numpy as np
 from shapely.geometry import MultiPoint
 from argparse import RawTextHelpFormatter
 from shapely.geometry import MultiPoint
 from net_utils import *
-from debug_utils import log_rss_memory_usage, get_script_path
+from debug_utils import log_rss_memory_usage, get_script_path, timeit
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 class GeoDatabase_Base(object):
 	"""A base class with common methods.
@@ -27,11 +34,6 @@ class GeoDatabase_Base(object):
 		:param compression: If the csv file is compressed specify the kind of compression. {'infer', 'gzip', 'bz2', 'zip', 'xz', None} See https://pandas.pydata.org/pandas-docs/stable/generated/pandas.read_csv.html.
 		:return: A GeoDatabase_Base object.
 		"""
-		self.geolog = logging.getLogger(__name__)
-		if not debug:
-			self.geolog.setLevel(level=logging.INFO)
-		else:
-			self.geolog.setLevel(level=logging.DEBUG)
 		self.name = name
 		self.original_db_path = original_db_path
 		self.db_path = db_path
@@ -70,7 +72,7 @@ class GeoDatabase_Base(object):
 		cursor = self.conn.cursor()
 		cursor.execute("SELECT name FROM sqlite_master WHERE type == 'index'")
 		self.indices = [index[0] for index in cursor.fetchall()]
-		self.geolog.debug('INDICES: {}'.format(self.indices))
+		logger.debug('INDICES: {}'.format(self.indices))
 		cursor.close()
 		return self.indices
 
@@ -82,9 +84,9 @@ class GeoDatabase_Base(object):
 		cursor = self.conn.cursor()
 		for column in columns:
 			if column in self.indices:
-				self.geolog.info('The sqlite geo-database index {} already exists.'.format(column))
+				logger.info('The sqlite geo-database index {} already exists.'.format(column))
 			else:
-				self.geolog.info('Creating Index {} for column {}'.format(column, column))
+				logger.info('Creating Index {} for column {}'.format(column, column))
 				cursor.execute('CREATE INDEX {} ON {}({})'.format(column, self.name, column))
 		cursor.close()
 
@@ -120,15 +122,22 @@ class GeoDatabase_Base(object):
 			del df
 			gc.collect()
 			log_rss_memory_usage('After creating sql database.')
-			self.geolog.info('Database {} created.'.format(self.db_path))
+			logger.info('Database {} created.'.format(self.db_path))
 		else:
 			self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
+			# Open database in autocommit mode by setting isolation_level to None.
+			# Set journal mode to WAL.
+			self.conn.execute('pragma journal_mode=wal')
+			self.conn.execute('pragma cache_size = {}'.format(500*1000))
+			self.conn.execute('pragma mmap_size = {}'.format(500*10**6))
+			self.conn.execute('pragma synchronous = 0')
 		self._get_indices()
 		self._create_indices(self.index_columns)
 		self.conn.row_factory = self._dict_factory
 		log_rss_memory_usage('Finished _load_database function.')
 		return self.conn
 
+	# @timeit
 	def get_geodata(self, *args, **kwargs):
 		"""Queries the database. It checks if the value exists in the result cache and adds the value if it didn't exist before.
 		:param args: mandatory args will be passed to the corresponding self._get_geodata method of each class.
@@ -201,7 +210,7 @@ class CountryLevel_GeoDB(GeoDatabase_Base):
 		if 'types' not in kwargs:
 			kwargs['types'] = CountryLevel_GeoDB.types
 		super(CountryLevel_GeoDB, self).__init__(*args, **kwargs)
-		self.geolog.debug('CountryLevel_GeoDB DB0 loaded.')
+		logger.debug('CountryLevel_GeoDB DB0 loaded.')
 
 	def _get_geodata(self, column, value, multi_op='AND'):
 		"""Queries the database.
@@ -259,7 +268,7 @@ class ZIPLevel_GeoDB(GeoDatabase_Base):
 			logging.error('FTS5 extension not available in your sqlite3 installation. py-sqlite3 version: {}. sqlite3 version: {}. Please, recompile or reinstall sqlite3 modules with FTS5 support.'.format(sqlite3.version, sqlite3.sqlite_version))
 			sys.exit(1)
 		super(ZIPLevel_GeoDB, self).__init__(name, original_db_path, db_path, names=names, types=types, index_columns=index_columns, update=update, debug=debug)
-		self.geolog.debug('ZIPLevel_GeoDB loaded.')
+		logger.debug('ZIPLevel_GeoDB loaded.')
 
 	@classmethod
 	def check_FTS5_support(cls):
@@ -301,7 +310,7 @@ class ZIPLevel_GeoDB(GeoDatabase_Base):
 				log_rss_memory_usage('After closing FTS5 database.')
 				del query
 				gc.collect()
-				self.geolog.info('Database {} created.'.format(self.db_path))
+				logger.info('Database {} created.'.format(self.db_path))
 			log_rss_memory_usage('After populating FTS5 database.')
 		self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
 		self.conn.row_factory = self._dict_factory
@@ -395,17 +404,45 @@ class ZIP_GeoIPDB(GeoDatabase_Base):
 		self.db_folder = kwargs.pop('db_folder', os.path.join(get_script_path(), 'db'))
 		super(ZIP_GeoIPDB, self).__init__(*args, **kwargs)
 		self.ip_int_to_list = self._load_cache_ip_file()
-		self.geolog.debug('ZIP_GeoIPDB DB9 loaded.')
+		# tempfile = StringIO()
+		# self.conn.row_factory = sqlite3.Row
+		# logger.info('dump...')
+		# for line in self.conn.iterdump():
+		# 	tempfile.write('%s\n' % line)
+		# self.conn.close()
+		# tempfile.seek(0)
+		# logger.info('loading from memory.')
+		# self.conn = sqlite3.connect(":memory:", check_same_thread=False, isolation_level=None)
+		# self.conn.execute('pragma journal_mode=wal')
+		# self.conn.execute('pragma cache_size = {}'.format(600*1000))
+		# self.conn.execute('pragma mmap_size = {}'.format(600*10**6))
+		# self.conn.execute('pragma synchronous = 0')
+		# self.conn.cursor().executescript(tempfile.read())
+		# self.conn.commit()
+		# self.conn.row_factory = self._dict_factory
+		# self.cursor = self.conn.cursor()
+		logger.info('ZIP_GeoIPDB DB9 loaded.')
 
 	def _load_cache_ip_file(self):
 		#LOADING DATABASE FROM FILE
 		cache_filename = os.path.join(self.db_folder, 'ip_int_to_list.npy')
 		if os.path.exists(cache_filename):
+			logger.info('File for cache IP_to file already exists.')
 			return np.load(cache_filename)
-		self.geolog.info('Creating cache IP_to file')
+		logger.info('Creating cache IP_to file.')
 		df = pd.read_csv(self.original_db_path, sep=self.separator, names=self.names, usecols=["ip_to"], dtype=self.types, compression=self.compression, keep_default_na=False, na_values=['-1.#IND', '1.#QNAN', '1.#IND', '-1.#QNAN', '#N/A N/A', '#N/A', 'N/A', 'n/a', '#NA', 'NULL', 'null', 'NaN', '-NaN', 'nan', '-nan', ''], encoding='utf-8')
 		np.save(cache_filename, df['ip_to'].values)
 		return df['ip_to'].values
+
+	# #@timeit
+	# def _n_search(self, value):
+	# 	idx = np.searchsorted(self.ip_int_to_list, value, side='right')
+	# 	return idx, self.ip_int_to_list[idx]
+
+	# #@timeit
+	# def _nnn_search(self, value):
+	# 	idx = bisect.bisect_right(self.ip_int_to_list, value)
+	# 	return idx, self.ip_int_to_list[idx]
 
 	def _get_geodata(self, column, value, multi_op='AND', str_ip=True):
 		"""Queries the database.
@@ -427,9 +464,9 @@ class ZIP_GeoIPDB(GeoDatabase_Base):
 				try:
 					value = ip2int(str(value))
 				except Exception as e:
-					self.geolog.warning('Error in ip2int with ip: |{}|'.format(str(value)))
+					logger.warning('Error in ip2int with ip: |{}|'.format(str(value)))
 					return None
-			idx = np.searchsorted(self.ip_int_to_list, value, side='right')
+			idx = bisect.bisect_right(self.ip_int_to_list, value)
 			ip_to = self.ip_int_to_list[idx]
 			query = 'SELECT * FROM {} WHERE ip_to = "{}"'.format(self.name, ip_to)
 			#query = 'SELECT * FROM {} WHERE {} BETWEEN ip_from AND ip_to'.format(self.name, value)
@@ -441,23 +478,23 @@ class ZIP_GeoIPDB(GeoDatabase_Base):
 			query = 'SELECT * FROM {} WHERE {}'.format(self.name, query)
 		else:
 			return None
-		self.geolog.debug('Query: {}'.format(query))
+		logger.debug('Query: {}'.format(query))
 
 		self.cursor.execute(query)
 		results = self.cursor.fetchall()
-		self.geolog.debug('Results {}'.format(results))
+		logger.debug('Results {}'.format(results))
 		if results is None or len(results) == 0:
 			return None
 		d = results[0]
 		d['location'] = '{},{}'.format(results[0]['latitude'], results[0]['longitude'])
 		d['representative_point'] = d['location']
 		if len(results) > 1:
-			self.geolog.debug('More than 1 result. Creating centroid.')
+			logger.debug('More than 1 result. Creating centroid.')
 			geo_points = [(r['latitude'], r['longitude']) for r in results]
 			geo_points = MultiPoint(geo_points)
 			repr_lat, repr_lon = geo_points.representative_point().coords[0]
 			d['representative_point'] = '{},{}'.format(repr_lat, repr_lon)
-			self.geolog.debug('Centroid done.')
+			logger.debug('Centroid done.')
 
 		for k in ['latitude', 'longitude', 'ip_from', 'ip_to', 'index']:
 			if k in d:
