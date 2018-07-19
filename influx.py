@@ -38,6 +38,10 @@ def point_generator(n=10**6):
 	        }
 	    }
 
+def line_generator(n=10**6):
+	for i in range(n):
+		yield 'brushEvents,user=Carol duration=10.0 {}'.format(pd.Timestamp('now').value) 
+
 @timeit
 def test_influx(batch):
 	a = [];
@@ -50,9 +54,30 @@ def test_influx(batch):
 		client.write_points(a, database=db)
 
 
+@timeit
+def test_influx_line(batch):
+	a = [];
+	for i in line_generator():
+		a.append(i);
+		if len(a) >= batch:
+			client.write_points(a, database=db, protocol='line')
+			a=[]
+	if len(a) >= 0:
+		client.write_points(a, database=db, protocol='line')
+
+
+print('json protocol')
 reset_database(client)
 test_influx(10**2)
 reset_database(client)
 test_influx(10**3)
 reset_database(client)
 test_influx(10**4)
+
+print('line protocol')
+reset_database(client)
+test_influx_line(10**2)
+reset_database(client)
+test_influx_line(10**3)
+reset_database(client)
+test_influx_line(10**4)

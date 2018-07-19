@@ -65,18 +65,18 @@ def point_generator(n=10**6):
 @timeit
 def test_es(batch, p=False):
 	if p:
-		ret = helpers.parallel_bulk(client, point_generator(), chunk_size=batch)
+		ret = helpers.parallel_bulk(client, point_generator(), chunk_size=batch, queue_size=6, thread_count=5)
 	else:
 		ret = helpers.streaming_bulk(client, point_generator(), chunk_size=batch)
 	return sum([int(ok) for ok, _ in ret])
 
 print('streaming_bulk')
 reset_index(client)
+test_es(10**2)
+reset_index(client)
 test_es(10**3)
 reset_index(client)
 test_es(10**4)
-reset_index(client)
-test_es(10**5)
 
 print('parallel_bulk')
 reset_index(client)
