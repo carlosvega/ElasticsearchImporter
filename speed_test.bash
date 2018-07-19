@@ -38,27 +38,59 @@ BEGIN{
 
 }
 
+echo "elasticsearch version $(curl -s 'localhost:9200?filter_path=version.number')"
+
 lines_file=$(mktemp)
 test_base=$(mktemp)
 test_py2=$(mktemp)
 test_py3=$(mktemp)
 test_pypy=$(mktemp)
-lines=1000000
+lines=10000000
 #Base
 generate_lines $lines > $lines_file
 #Python 2
-echo "Test Python2 $test_py2"
-cat $lines_file | python elasticImporter.py -c example.cfg --no_source --threads 2 --no_all --bulk 5000 2> $test_py2
+echo ""
+curl -XDELETE localhost:9200/speed_test &> /dev/null
+echo "1st Test Python2 $(python2 --version) $test_py2"
+cat $lines_file | python2 elasticImporter.py -c example.cfg --no_source --threads 2 --no_all --index speed_test --bulk 5000 2> $test_py2
 speed_py2=$(tail -1 $test_py2 | awk '{print $(NF-1)}')
 echo "Python2: $speed_py2"
+
+echo ""
+curl -XDELETE localhost:9200/speed_test &> /dev/null
+echo "2nd Test Python2 $(python2 --version) $test_py2"
+cat $lines_file | python2 elasticImporter.py -c example.cfg --no_source --threads 2 --no_all --index speed_test --bulk 5000 2> $test_py2
+speed_py2=$(tail -1 $test_py2 | awk '{print $(NF-1)}')
+echo "Python2: $speed_py2"
+
 #Python 3
-echo "Test Python3 $test_py3"
-cat $lines_file | python3 elasticImporter.py -c example.cfg --no_source --threads 2 --no_all --bulk 5000 2> $test_py3
+echo ""
+curl -XDELETE localhost:9200/speed_test &> /dev/null
+echo "1st Test Python3 $(python3 --version) $test_py3"
+cat $lines_file | python3 elasticImporter.py -c example.cfg --no_source --threads 2 --no_all --index speed_test --bulk 5000 2> $test_py3
 speed_py3=$(tail -1 $test_py3 | awk '{print $(NF-1)}')
 echo "Python3: $speed_py3"
+
+echo ""
+curl -XDELETE localhost:9200/speed_test &> /dev/null
+echo "2nd Test Python3 $(python3 --version) $test_py3"
+cat $lines_file | python3 elasticImporter.py -c example.cfg --no_source --threads 2 --no_all --index speed_test --bulk 5000 2> $test_py3
+speed_py3=$(tail -1 $test_py3 | awk '{print $(NF-1)}')
+echo "Python3: $speed_py3"
+
 #PyPy
-echo "Test PyPy $test_pypy"
-cat $lines_file | pypy elasticImporter.py -c example.cfg --no_source  --threads 2 --no_all --bulk 5000 2> $test_pypy
+echo ""
+curl -XDELETE localhost:9200/speed_test &> /dev/null
+echo "1st Test PyPy $(pypy --version) $test_pypy"
+cat $lines_file | pypy elasticImporter.py -c example.cfg --no_source  --threads 2 --no_all --index speed_test --bulk 5000 2> $test_pypy
 speed_pypy=$(tail -1 $test_pypy | awk '{print $(NF-1)}')
 echo "PyPy: $speed_pypy"
+
+echo ""
+curl -XDELETE localhost:9200/speed_test &> /dev/null
+echo "2nd Test PyPy $(pypy --version) $test_pypy"
+cat $lines_file | pypy elasticImporter.py -c example.cfg --no_source  --threads 2 --no_all --index speed_test --bulk 5000 2> $test_pypy
+speed_pypy=$(tail -1 $test_pypy | awk '{print $(NF-1)}')
+echo "PyPy: $speed_pypy"
+
 
