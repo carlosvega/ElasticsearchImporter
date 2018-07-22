@@ -63,7 +63,7 @@ function install_virtualenv_pypy {
 
 function check_FTS5 {
 	echo "[ - Checking if current sqlite3 installation supports FTS5... ]"
-	python checheck_fts5.py &> /dev/null
+	python extra/checheck_fts5.py &> /dev/null
 	fts5_support=$?
 	if [[ "$fts5_support" -eq 0 ]]
 	then

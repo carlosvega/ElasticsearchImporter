@@ -6,7 +6,7 @@ python:
 install:
   - pip install -r requirements.txt
 before_script:
-  - bash install_sqlite_for_ubuntu.bash
+  - bash extra/install_sqlite_for_ubuntu.bash
 script:
   - python check_fts5.py
   - py.test

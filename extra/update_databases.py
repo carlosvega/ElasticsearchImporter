@@ -1,6 +1,5 @@
 import urllib3, logging, os, zipfile, io, gzip
 from six import iteritems
-from debug_utils import log_rss_memory_usage
 
 def update_tor_databases(path='db'):
 	db_urls = {
@@ -27,8 +26,8 @@ def update_db9_database(path='db', filename='IP2LOCATION-LITE-DB9.CSV'):
 			for line in f:
 				db9.write(line.upper())
 
-thislog = logging.getLogger(__name__)
-logging.basicConfig(format="[ %(asctime)s %(levelname)s %(threadName)s ] " + "%(message)s", level=logging.INFO)
-update_tor_databases()
-update_db9_database()
-log_rss_memory_usage('Databases updated.')
+if __name__ == '__main__':
+	thislog = logging.getLogger(__name__)
+	logging.basicConfig(format="[ %(asctime)s %(levelname)s %(threadName)s ] " + "%(message)s", level=logging.INFO)
+	update_tor_databases()
+	update_db9_database()
