@@ -8,7 +8,7 @@ install:
 before_script:
   - bash extra/install_sqlite_for_ubuntu.bash
 script:
-  - python check_fts5.py
+  - python extra/check_fts5.py
   - py.test
 notifications:
   email:
