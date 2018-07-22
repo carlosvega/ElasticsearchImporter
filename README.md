@@ -6,7 +6,7 @@ Generic Elasticsearch Importer
 ```Bash
 git clone git@github.com:carlosvega/ElasticsearchImporter.git ElasticsearchImporter
 cd ElasticsearchImporter
-bash install.bash
+bash install.bash # or ~/extra/install_sqlite_for_ubuntu.bash if using ubuntu
 ```
 
 ### Ubuntu Docker
@@ -14,7 +14,7 @@ bash install.bash
 ```Bash
 git clone git@github.com:carlosvega/ElasticsearchImporter.git ElasticsearchImporter
 cd ElasticsearchImporter
-docker build -f Dockerfile.ubuntu -t ubuntu_esimporter .
+docker build -f ~/extra/Dockerfile.ubuntu -t ubuntu_esimporter .
 ```
 
 ### CentOS Docker
@@ -22,7 +22,7 @@ docker build -f Dockerfile.ubuntu -t ubuntu_esimporter .
 ```Bash
 git clone git@github.com:carlosvega/ElasticsearchImporter.git ElasticsearchImporter
 cd ElasticsearchImporter
-docker build -f Dockerfile.centos -t centos_esimporter .
+docker build -f ~/extra/Dockerfile.centos -t centos_esimporter .
 ```
 
 ## Considerations
