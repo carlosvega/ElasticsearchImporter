@@ -495,7 +495,12 @@ def input_generator(cfg, index, doc_type, args, f):
 			for date_field in args.date_fields:
 				if date_field in dicc:
 					dicc[date_field] = dicc[date_field]+'000'
-		a = {'_source' : dicc, '_index'  : index, '_type'   : doc_type}
+
+                if es_dsl_version >= (6, 0, 0):
+                    # changed for elastic 6.x:
+                    a = {'_source': dicc, '_index': index, '_type': 'doc'}
+                else:
+                    a = {'_source' : dicc, '_index'  : index, '_type'   : doc_type}
 		if args.md5_id:
 			a['_id'] = md5_calc(dicc, cfg['order_in_file'], args)
 
