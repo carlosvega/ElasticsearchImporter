@@ -111,7 +111,7 @@ In the [example.cfg](https://github.com/carlosvega/ElasticsearchImporter/blob/ma
 }
 ```
 
-## TODO Tasks
+## TODO Tasks
 
 - Add an option to include a timestamp on the documents
 - Add an option to exclude columns
