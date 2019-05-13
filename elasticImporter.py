@@ -324,12 +324,17 @@ def translate_cfg_property_std(v):
 		return Boolean()
 
 def create_doc_class(cfg, doc_type, args):
+	global translate_cfg_property
+	translate_func = translate_cfg_property
+	if translate_cfg_property is None:
+		translate_func = translate_cfg_property_std
+
 	#store dates
 	date_fields = []
 	#create class
 	dicc = {}
 	for k, v in cfg['properties'].items():
-		dicc[k] = translate_cfg_property(v)
+		dicc[k] = translate_func(v)
 		if v == 'date':
 			date_fields.append(k)
 
