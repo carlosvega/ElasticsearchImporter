@@ -203,8 +203,8 @@ def get_geodata_field(level):
 
 	 {'country_code': 'US',
 	  'country_name': 'UNITED STATES',
- 	  'location': '37.09024,-95.712891',
- 	  'representative_point': '37.09024,-95.712891'}
+	  'location': '37.09024,-95.712891',
+	  'representative_point': '37.09024,-95.712891'}
 
 	Format for Multilevel geolocalization:
 
@@ -495,7 +495,12 @@ def input_generator(cfg, index, doc_type, args, f):
 			for date_field in args.date_fields:
 				if date_field in dicc:
 					dicc[date_field] = dicc[date_field]+'000'
-		a = {'_source' : dicc, '_index'  : index, '_type'   : doc_type}
+
+				if es_dsl_version >= (6, 0, 0):
+					# changed for elastic 6.x:
+					a = {'_source': dicc, '_index': index, '_type': 'doc'}
+				else:
+					a = {'_source' : dicc, '_index'  : index, '_type'   : doc_type}
 		if args.md5_id:
 			a['_id'] = md5_calc(dicc, cfg['order_in_file'], args)
 
@@ -508,19 +513,19 @@ def dummy_iterator(n=100000):
 		yield j_element
 
 def progress_t(threadname, stop_event):
-    global start_indexing, index_success, index_failed, index_relative_ctr, failed_items
-    prev_value = 0
-    while(not stop_event.is_set()):
-        stop_event.wait(2)
-        temp_abs_ctr = index_success+index_failed
-        if prev_value != temp_abs_ctr:
-            index_relative_ctr = 0
-            prev_value = temp_abs_ctr
-            lap_elapsed = time.time() - start_indexing
-            lap_speed = temp_abs_ctr/float(lap_elapsed)
-            log.info('Success: {}, Failed: {}. Elapsed: {:.4f} (sec.). Speed: {:.4f} (reg/s)'.format(index_success, index_failed, lap_elapsed, lap_speed))
-            if index_failed:
-            	log.debug('Failed lines: {}'.format(failed_items))
+	global start_indexing, index_success, index_failed, index_relative_ctr, failed_items
+	prev_value = 0
+	while(not stop_event.is_set()):
+		stop_event.wait(2)
+		temp_abs_ctr = index_success+index_failed
+		if prev_value != temp_abs_ctr:
+			index_relative_ctr = 0
+			prev_value = temp_abs_ctr
+			lap_elapsed = time.time() - start_indexing
+			lap_speed = temp_abs_ctr/float(lap_elapsed)
+			log.info('Success: {}, Failed: {}. Elapsed: {:.4f} (sec.). Speed: {:.4f} (reg/s)'.format(index_success, index_failed, lap_elapsed, lap_speed))
+			if index_failed:
+				log.debug('Failed lines: {}'.format(failed_items))
 
 if __name__ == '__main__':
 	#GLOBAL VARIABLES FOR progress_t
